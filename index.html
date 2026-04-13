@@ -46,6 +46,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;}
 .topbar{padding:14px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:rgba(10,15,26,.85);backdrop-filter:blur(12px);position:sticky;top:0;z-index:40;}
 .topbar-left{display:flex;align-items:center;gap:12px;}
+.topbar-actions{display:flex;align-items:center;gap:8px;}
 .menu-btn{display:none;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px 6px;border-radius:8px;}
 .menu-btn:hover{background:var(--surface2);}
 .topbar-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;}
@@ -215,6 +216,22 @@ canvas.sig.signed{border-color:var(--green);}
 .empty{text-align:center;padding:40px 20px;color:var(--muted);}
 .empty-ico{font-size:36px;margin-bottom:10px;}
 
+/* ── AUTH ── */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:22px;position:relative;z-index:1;}
+.auth-card{width:100%;max-width:460px;background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:22px;}
+.auth-brand{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;letter-spacing:-.5px;}
+.auth-brand span{color:var(--accent);}
+.auth-sub{font-size:12px;color:var(--muted);margin:4px 0 16px;}
+.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.auth-tab{padding:9px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--muted2);font-size:12px;cursor:pointer;font-weight:600;}
+.auth-tab.on{color:var(--accent);border-color:rgba(249,115,22,.3);background:var(--adim);}
+.auth-form{display:none;}
+.auth-form.on{display:block;}
+.auth-msg{font-size:12px;margin-top:8px;min-height:16px;color:var(--muted);}
+.auth-msg.error{color:var(--red);}
+.auth-msg.success{color:var(--green);}
+.hidden-by-role{display:none !important;}
+
 /* ════ CHECKLIST BUILDER ════ */
 .cl-builder{display:flex;flex-direction:column;gap:10px;}
 
@@ -264,10 +281,66 @@ canvas.sig.signed{border-color:var(--green);}
   .topbar{padding:12px 16px;}
   .add-section-row{gap:6px;}
   .add-section-btn{font-size:11px;padding:6px 10px;}
+  .auth-card{padding:16px;}
 }
 </style>
 </head>
 <body>
+<div id="auth-view" class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-brand">Manten<span>Pro</span></div>
+    <div class="auth-sub">Ingresa para administrar reportes y órdenes.</div>
+    <div class="auth-tabs">
+      <button class="auth-tab on" id="tab-login" type="button">Iniciar sesión</button>
+      <button class="auth-tab" id="tab-register" type="button">Registrarme</button>
+    </div>
+
+    <form class="auth-form on" id="login-form">
+      <div class="fg">
+        <label class="fl">Email</label>
+        <input class="fi" id="login-email" type="email" placeholder="correo@empresa.com">
+      </div>
+      <div class="fg">
+        <label class="fl">Contraseña</label>
+        <input class="fi" id="login-password" type="password" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center;">Entrar</button>
+    </form>
+
+    <form class="auth-form" id="register-form">
+      <div class="fg">
+        <label class="fl">Nombre completo</label>
+        <input class="fi" id="register-name" placeholder="Nombre Apellido">
+      </div>
+      <div class="fg">
+        <label class="fl">Email</label>
+        <input class="fi" id="register-email" type="email" placeholder="correo@empresa.com">
+      </div>
+      <div class="fg">
+        <label class="fl">Rol</label>
+        <select class="fs" id="register-role">
+          <option value="tecnico">Técnico</option>
+          <option value="administrador">Administrador</option>
+        </select>
+      </div>
+      <div class="frow">
+        <div class="fg">
+          <label class="fl">Contraseña</label>
+          <input class="fi" id="register-password" type="password" placeholder="Mínimo 6 caracteres">
+        </div>
+        <div class="fg">
+          <label class="fl">Confirmar contraseña</label>
+          <input class="fi" id="register-password-confirm" type="password" placeholder="Repite contraseña">
+        </div>
+      </div>
+      <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center;">Crear cuenta</button>
+    </form>
+
+    <div class="auth-msg" id="auth-msg"></div>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
 <div class="sb-backdrop" id="sb-backdrop" onclick="closeSidebar()"></div>
 <div class="shell">
 
@@ -282,21 +355,21 @@ canvas.sig.signed{border-color:var(--green);}
   </div>
   <nav class="s-nav">
     <div class="s-section">Principal</div>
-    <button class="s-item on"  id="ni-dashboard"   onclick="goTo('dashboard',this)"><span class="ico">📊</span>Dashboard</button>
-    <button class="s-item"     id="ni-orders"       onclick="goTo('orders',this)"><span class="ico">📋</span>Órdenes<span class="s-badge" id="nb-pend">0</span></button>
-    <button class="s-item"     id="ni-tech"         onclick="goTo('tech',this)"><span class="ico">🔧</span>Vista Técnico</button>
-    <button class="s-item"     id="ni-report"       onclick="goTo('report',this)"><span class="ico">📄</span>Reportes</button>
+    <button class="s-item on"  id="ni-dashboard"   data-role="administrador" onclick="goTo('dashboard',this)"><span class="ico">📊</span>Dashboard</button>
+    <button class="s-item"     id="ni-orders"      data-role="administrador" onclick="goTo('orders',this)"><span class="ico">📋</span>Órdenes<span class="s-badge" id="nb-pend">0</span></button>
+    <button class="s-item"     id="ni-tech"        data-role="tecnico" onclick="goTo('tech',this)"><span class="ico">🔧</span>Vista Técnico</button>
+    <button class="s-item"     id="ni-report"      data-role="tecnico,administrador" onclick="goTo('report',this)"><span class="ico">📄</span>Reportes</button>
     <div class="s-section">Catálogos</div>
-    <button class="s-item"     id="ni-clients"      onclick="goTo('clients',this)"><span class="ico">🏢</span>Clientes</button>
-    <button class="s-item"     id="ni-branches"     onclick="goTo('branches',this)"><span class="ico">📍</span>Sucursales</button>
-    <button class="s-item"     id="ni-technicians"  onclick="goTo('technicians',this)"><span class="ico">👷</span>Técnicos</button>
-    <button class="s-item"     id="ni-equipment"    onclick="goTo('equipment',this)"><span class="ico">⚙️</span>Equipos</button>
-    <button class="s-item"     id="ni-checklists"   onclick="goTo('checklists',this)"><span class="ico">✅</span>Check-lists</button>
+    <button class="s-item"     id="ni-clients"      data-role="administrador" onclick="goTo('clients',this)"><span class="ico">🏢</span>Clientes</button>
+    <button class="s-item"     id="ni-branches"     data-role="administrador" onclick="goTo('branches',this)"><span class="ico">📍</span>Sucursales</button>
+    <button class="s-item"     id="ni-technicians"  data-role="administrador" onclick="goTo('technicians',this)"><span class="ico">👷</span>Técnicos</button>
+    <button class="s-item"     id="ni-equipment"    data-role="administrador" onclick="goTo('equipment',this)"><span class="ico">⚙️</span>Equipos</button>
+    <button class="s-item"     id="ni-checklists"   data-role="administrador" onclick="goTo('checklists',this)"><span class="ico">✅</span>Check-lists</button>
   </nav>
   <div class="s-foot">
     <div class="s-user">
-      <div class="s-av">BR</div>
-      <div><div style="font-size:12px;font-weight:500;">Brian</div><div style="font-size:10px;color:var(--muted);">Administrador</div></div>
+      <div class="s-av" id="s-user-av">MP</div>
+      <div><div style="font-size:12px;font-weight:500;" id="s-user-name">Invitado</div><div style="font-size:10px;color:var(--muted);" id="s-user-role">Sin sesión</div></div>
     </div>
   </div>
 </aside>
@@ -308,7 +381,10 @@ canvas.sig.signed{border-color:var(--green);}
       <button class="menu-btn" onclick="openSidebar()">☰</button>
       <div class="topbar-title" id="pg-title">Dashboard</div>
     </div>
-    <div id="pg-actions"></div>
+    <div class="topbar-actions">
+      <div id="pg-actions"></div>
+      <button class="btn btn-ghost btn-sm" id="btn-logout" onclick="logoutUser()" style="display:none;">Salir</button>
+    </div>
   </div>
 
   <!-- DASHBOARD -->
@@ -406,6 +482,7 @@ canvas.sig.signed{border-color:var(--green);}
 
   <!-- CHECKLISTS -->
   <div class="page" id="pg-checklists"><div class="cards" id="grid-checklists"></div></div>
+</div>
 </div>
 </div>
 
@@ -648,6 +725,10 @@ function closeSidebar(){ document.getElementById('sidebar').classList.remove('op
 var PAGE_TITLES={dashboard:'Dashboard',orders:'Órdenes de Trabajo',tech:'Vista Técnico',report:'Reportes',clients:'Clientes',branches:'Sucursales',technicians:'Técnicos',equipment:'Equipos',checklists:'Check-lists'};
 
 function goTo(page,el){
+  if(typeof window.canAccessPage==='function' && !window.canAccessPage(page)){
+    toast('⛔ No tienes permisos para esta sección');
+    return;
+  }
   closeSidebar();
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('on'); });
   document.querySelectorAll('.s-item').forEach(function(i){ i.classList.remove('on'); });
@@ -1113,5 +1194,6 @@ function buildReport(o){
 initSig();
 renderDashboard();
 </script>
+<script type="module" src="./auth.js"></script>
 </body>
 </html>
