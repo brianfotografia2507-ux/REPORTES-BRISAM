@@ -1112,18 +1112,80 @@ function initSig(){
 function markSig(){ sigSigned=true; document.getElementById('sig-c').classList.add('signed'); document.getElementById('sig-st').textContent='✓ Firmado'; }
 function clearSig(){ var c=document.getElementById('sig-c'); c.getContext('2d').clearRect(0,0,c.width,c.height); sigSigned=false; c.classList.remove('signed'); document.getElementById('sig-st').textContent='Sin firmar'; }
 
-function closeOrder(){
+function collectChecklistReportData(order,total,done){
+  var ck=gCl(order.clId);
+  var respuestas={sections:[]},obs=[];
+
+  if(ck){
+    ck.sections.forEach(function(sec,si){
+      if(sec.type==='checklist'){
+        var items=sec.items.map(function(item,ii){
+          var key='s'+si+'i'+ii;
+          return {id:item.id,text:item.text,cat:item.cat,checked:!!chkState[key]};
+        });
+        respuestas.sections.push({id:sec.id,type:'checklist',title:sec.title,items:items});
+      }
+      if(sec.type==='fields'){
+        var fields=sec.fields.map(function(f){
+          var el=document.getElementById('df-'+f.id);
+          return {id:f.id,label:f.label,inputType:f.inputType,value:el?el.value:''};
+        });
+        respuestas.sections.push({id:sec.id,type:'fields',title:sec.title,fields:fields});
+      }
+      if(sec.type==='textarea'){
+        var ta=document.getElementById('dta-'+sec.id);
+        var text=ta?ta.value:'';
+        respuestas.sections.push({id:sec.id,type:'textarea',title:sec.title,value:text});
+        if(text) obs.push(sec.title+': '+text);
+      }
+    });
+  } else {
+    respuestas.sections.push({
+      id:'fallback',
+      type:'checklist',
+      title:'Actividades',
+      items:[{id:'s0i0',text:'Revisión general',cat:'General',checked:!!chkState['s0i0']}]
+    });
+  }
+
+  respuestas.progreso={total:total,completadas:done,porcentaje:total?Math.round(done/total*100):0};
+  return {respuestas:respuestas,observaciones:obs.join('\n\n')};
+}
+
+async function closeOrder(){
   var keys=Object.keys(chkState),total=keys.length,done=keys.filter(function(k){return chkState[k];}).length;
   if(done<Math.ceil(total*0.5)){toast('⚠️ Completa al menos el 50% del check-list');return;}
   if(!sigSigned){toast('✏️ Se requiere la firma del responsable');return;}
   var o=null; for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===curOrderId){o=DB.orders[i];break;}
   if(!o)return;
+
+  if(typeof window.saveReportToFirestore!=='function'){
+    toast('⚠️ Módulo de reportes no disponible');
+    return;
+  }
+
+  var ck=gCl(o.clId),tc=gTech(o.techId),captured=collectChecklistReportData(o,total,done);
+  try{
+    await window.saveReportToFirestore({
+      ordenId:o.id,
+      tecnicoId:o.techId,
+      tecnicoNombre:tc?tc.name:'',
+      checklist:{id:o.clId,name:ck?ck.name:'—'},
+      respuestas:captured.respuestas,
+      observaciones:captured.observaciones||o.desc||''
+    });
+  }catch(err){
+    console.error('Error guardando reporte en Firestore:',err);
+    toast('❌ No se pudo guardar el reporte en Firebase');
+    return;
+  }
+
   o.status='done';
   document.getElementById('wd-wrap').style.display='none';
   buildReport(o);
   goTo('report',document.getElementById('ni-report'));
   renderTechView(); renderDashboard();
-  toast('✅ Reporte generado exitosamente');
+  toast('✅ Reporte generado y guardado');
 }
 
 function buildReport(o){

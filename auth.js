@@ -10,6 +10,8 @@ import {
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 import {
+  addDoc,
+  collection,
   doc,
   getDoc,
   setDoc,
@@ -27,6 +29,7 @@ var roleAllowedPages = {
 };
 
 var currentRole = null;
+var currentUserProfile = null;
 var firebaseAvailable = !!firebaseReady && !!auth && !!db;
 
 function $(id) {
@@ -181,6 +184,7 @@ async function loadUserState(user) {
 
   if (!user) {
     currentRole = null;
+    currentUserProfile = null;
     showApp(false);
     return;
   }
@@ -194,6 +198,7 @@ async function loadUserState(user) {
       return;
     }
     applyRoleVisibility(role);
+    currentUserProfile = profile || {};
     setUserHeader(profile || {}, user.email || "");
     showApp(true);
     goRoleLanding(role);
@@ -256,6 +261,38 @@ window.canAccessPage = function canAccessPage(page) {
 window.logoutUser = async function logoutUser() {
   if (!firebaseAvailable) return;
   await signOut(auth);
+};
+
+window.saveReportToFirestore = async function saveReportToFirestore(reportData) {
+  if (!firebaseAvailable) {
+    throw new Error("Firebase no está disponible.");
+  }
+
+  var user = auth.currentUser;
+  if (!user) {
+    throw new Error("Debes iniciar sesión para guardar reportes.");
+  }
+
+  var profile = currentUserProfile;
+  if (!profile || !profile.role) {
+    profile = (await getProfile(user.uid)) || {};
+    currentUserProfile = profile;
+  }
+
+  var payload = Object.assign({}, reportData || {});
+  payload.uid = user.uid;
+  payload.tecnicoNombre =
+    profile.name ||
+    payload.tecnicoNombre ||
+    user.displayName ||
+    user.email ||
+    "Técnico";
+  payload.fecha = serverTimestamp();
+  payload.userEmail = user.email || "";
+  payload.userRole = profile.role || "";
+
+  var created = await addDoc(collection(db, "reportes"), payload);
+  return { id: created.id };
 };
 
 setupEvents();
