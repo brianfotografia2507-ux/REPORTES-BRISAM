@@ -204,14 +204,47 @@ async function loadUserState(user) {
 }
 
 function setupEvents() {
-  $("tab-login").addEventListener("click", function () {
-    activateTab("login");
-  });
-  $("tab-register").addEventListener("click", function () {
-    activateTab("register");
-  });
-  $("login-form").addEventListener("submit", handleLogin);
-  $("register-form").addEventListener("submit", handleRegister);
+  var tabLogin = $("tab-login");
+  var tabRegister = $("tab-register");
+  var loginForm = $("login-form");
+  var registerForm = $("register-form");
+  var registerBtn = $("register-submit");
+  var loginBtn = $("login-submit");
+
+  if (tabLogin) {
+    tabLogin.addEventListener("click", function () {
+      activateTab("login");
+    });
+  }
+
+  if (tabRegister) {
+    tabRegister.addEventListener("click", function () {
+      activateTab("register");
+    });
+  }
+
+  if (loginForm) {
+    loginForm.addEventListener("submit", handleLogin);
+  }
+
+  if (registerForm) {
+    registerForm.addEventListener("submit", handleRegister);
+  }
+
+  // Fallback explícito: algunos navegadores/extensiones bloquean submit implícito.
+  if (registerBtn && registerForm) {
+    registerBtn.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      handleRegister(ev);
+    });
+  }
+
+  if (loginBtn && loginForm) {
+    loginBtn.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      handleLogin(ev);
+    });
+  }
 }
 
 window.canAccessPage = function canAccessPage(page) {
@@ -232,8 +265,8 @@ if (!firebaseAvailable) {
     "Firebase no está configurado. Completa firebase-config.js para activar el acceso.",
     "error"
   );
-  var loginBtn = document.querySelector("#login-form button[type='submit']");
-  var registerBtn = document.querySelector("#register-form button[type='submit']");
+  var loginBtn = $("login-submit");
+  var registerBtn = $("register-submit");
   if (loginBtn) loginBtn.disabled = true;
   if (registerBtn) registerBtn.disabled = true;
 } else {
