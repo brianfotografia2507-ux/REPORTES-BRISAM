@@ -27,6 +27,7 @@ var roleAllowedPages = {
 };
 
 var currentRole = null;
+var firebaseAvailable = !!firebaseReady && !!auth && !!db;
 
 function $(id) {
   return document.getElementById(id);
@@ -37,6 +38,15 @@ function setAuthMessage(msg, cls) {
   if (!el) return;
   el.textContent = msg || "";
   el.className = "auth-msg" + (cls ? " " + cls : "");
+}
+
+function ensureFirebaseReady() {
+  if (firebaseAvailable) return true;
+  setAuthMessage(
+    "Firebase no está disponible. Verifica la configuración de firebase-config.js.",
+    "error"
+  );
+  return false;
 }
 
 function isValidEmail(email) {
@@ -104,6 +114,7 @@ function goRoleLanding(role) {
 }
 
 async function getProfile(uid) {
+  if (!firebaseAvailable) return null;
   var ref = doc(db, "users", uid);
   var snap = await getDoc(ref);
   return snap.exists() ? snap.data() : null;
@@ -117,6 +128,7 @@ function showApp(show) {
 
 async function handleRegister(ev) {
   ev.preventDefault();
+  if (!ensureFirebaseReady()) return;
 
   var name = $("register-name").value.trim();
   var email = $("register-email").value.trim().toLowerCase();
@@ -147,6 +159,7 @@ async function handleRegister(ev) {
 
 async function handleLogin(ev) {
   ev.preventDefault();
+  if (!ensureFirebaseReady()) return;
   var email = $("login-email").value.trim().toLowerCase();
   var password = $("login-password").value;
   if (!isValidEmail(email)) return setAuthMessage("Ingresa un email válido.", "error");
@@ -161,6 +174,11 @@ async function handleLogin(ev) {
 }
 
 async function loadUserState(user) {
+  if (!firebaseAvailable) {
+    showApp(false);
+    return;
+  }
+
   if (!user) {
     currentRole = null;
     showApp(false);
@@ -203,16 +221,21 @@ window.canAccessPage = function canAccessPage(page) {
 };
 
 window.logoutUser = async function logoutUser() {
+  if (!firebaseAvailable) return;
   await signOut(auth);
 };
 
 setupEvents();
 
-if (!firebaseReady || !auth || !db) {
+if (!firebaseAvailable) {
   setAuthMessage(
     "Firebase no está configurado. Completa firebase-config.js para activar el acceso.",
     "error"
   );
+  var loginBtn = document.querySelector("#login-form button[type='submit']");
+  var registerBtn = document.querySelector("#register-form button[type='submit']");
+  if (loginBtn) loginBtn.disabled = true;
+  if (registerBtn) registerBtn.disabled = true;
 } else {
   onAuthStateChanged(auth, function (user) {
     loadUserState(user);

@@ -13,22 +13,41 @@ const firebaseConfig = {
   measurementId: "G-494VKKY21T",
 };
 
+const requiredFirebaseKeys = [
+  "apiKey",
+  "authDomain",
+  "projectId",
+  "storageBucket",
+  "messagingSenderId",
+  "appId",
+];
+
 function hasRealFirebaseConfig(config) {
-  return Object.values(config).every(function (value) {
-    return value && String(value).indexOf("YOUR_") !== 0;
+  return requiredFirebaseKeys.every(function (key) {
+    var value = config[key];
+    return (
+      typeof value === "string" &&
+      value.trim() !== "" &&
+      String(value).indexOf("YOUR_") !== 0
+    );
   });
 }
 
-const firebaseReady = hasRealFirebaseConfig(firebaseConfig);
+let firebaseReady = hasRealFirebaseConfig(firebaseConfig);
 
 let app = null;
 let auth = null;
 let db = null;
 
 if (firebaseReady) {
-  app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } catch (error) {
+    firebaseReady = false;
+    console.error("Error inicializando Firebase:", error);
+  }
 } else {
   console.warn(
     "Firebase no está configurado. Edita firebase-config.js con tus credenciales."
