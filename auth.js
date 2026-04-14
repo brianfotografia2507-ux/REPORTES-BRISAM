@@ -14,11 +14,8 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
-  query,
   setDoc,
   serverTimestamp,
-  where,
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
 var roleLandingPage = {
@@ -34,6 +31,7 @@ var roleAllowedPages = {
 var currentRole = null;
 var currentUserProfile = null;
 var firebaseAvailable = !!firebaseReady && !!auth && !!db;
+var firestoreReadApiPromise = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -334,6 +332,29 @@ function escapeHtml(text) {
     .replace(/'/g, "&#39;");
 }
 
+async function getFirestoreReadApi() {
+  if (firestoreReadApiPromise) {
+    return firestoreReadApiPromise;
+  }
+
+  firestoreReadApiPromise = import(
+    "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js"
+  )
+    .then(function (mod) {
+      return {
+        getDocs: mod.getDocs,
+        query: mod.query,
+        where: mod.where,
+      };
+    })
+    .catch(function (err) {
+      console.error("No se pudo cargar API de lectura Firestore:", err);
+      return null;
+    });
+
+  return firestoreReadApiPromise;
+}
+
 function renderReportsInPanel(reportDocs) {
   var container = $("rpt-content");
   if (!container) return;
@@ -398,6 +419,11 @@ window.loadReportsIntoPanel = async function loadReportsIntoPanel() {
     '<div class="empty"><div class="empty-ico">⏳</div>Cargando reportes...</div>';
 
   try {
+    var readApi = await getFirestoreReadApi();
+    if (!readApi || !readApi.getDocs || !readApi.query || !readApi.where) {
+      throw new Error("Firestore read API no disponible");
+    }
+
     var user = auth.currentUser;
     var profile = currentUserProfile;
     if (!profile || !profile.role) {
@@ -407,10 +433,10 @@ window.loadReportsIntoPanel = async function loadReportsIntoPanel() {
 
     var snap;
     if (profile.role === "administrador") {
-      snap = await getDocs(collection(db, "reportes"));
+      snap = await readApi.getDocs(collection(db, "reportes"));
     } else {
-      snap = await getDocs(
-        query(collection(db, "reportes"), where("uid", "==", user.uid))
+      snap = await readApi.getDocs(
+        readApi.query(collection(db, "reportes"), readApi.where("uid", "==", user.uid))
       );
     }
 
