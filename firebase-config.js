@@ -4,12 +4,13 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/10.13.2/firebas
 
 // Reemplaza estos valores con la configuración de tu proyecto Firebase.
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyAjgXqF4hcKPdZPiYuhuv2r0o2I9ZvI3PM",
+  authDomain: "brisam-sytem.firebaseapp.com",
+  projectId: "brisam-sytem",
+  storageBucket: "brisam-sytem.firebasestorage.app",
+  messagingSenderId: "258281960772",
+  appId: "1:258281960772:web:74436c8b3bbf8cf54b9311",
+  measurementId: "G-494VKKY21T",
 };
 
 function hasRealFirebaseConfig(config) {
