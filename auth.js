@@ -52,6 +52,11 @@ function ensureFirebaseReady() {
   return false;
 }
 
+function getFirebaseErrorCode(err) {
+  if (!err || !err.code) return "";
+  return String(err.code).trim();
+}
+
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -135,13 +140,12 @@ async function handleRegister(ev) {
 
   var name = $("register-name").value.trim();
   var email = $("register-email").value.trim().toLowerCase();
-  var role = normalizeRole($("register-role").value);
+  var role = "tecnico";
   var password = $("register-password").value;
   var confirm = $("register-password-confirm").value;
 
   if (!name) return setAuthMessage("Ingresa tu nombre completo.", "error");
   if (!isValidEmail(email)) return setAuthMessage("Ingresa un email válido.", "error");
-  if (!role) return setAuthMessage("Selecciona un rol válido.", "error");
   if (!password || password.length < 6) return setAuthMessage("La contraseña debe tener al menos 6 caracteres.", "error");
   if (password !== confirm) return setAuthMessage("Las contraseñas no coinciden.", "error");
 
@@ -156,7 +160,11 @@ async function handleRegister(ev) {
     });
     setAuthMessage("Cuenta creada correctamente. Redirigiendo...", "success");
   } catch (err) {
-    setAuthMessage("No fue posible crear la cuenta: " + (err && err.message ? err.message : "Error desconocido"), "error");
+    if (getFirebaseErrorCode(err) === "auth/email-already-in-use") {
+      setAuthMessage("Este usuario ya existe", "error");
+      return;
+    }
+    setAuthMessage("No fue posible crear la cuenta. Intenta nuevamente.", "error");
   }
 }
 
