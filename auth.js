@@ -14,8 +14,11 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
+  query,
   setDoc,
   serverTimestamp,
+  where,
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
 var roleLandingPage = {
@@ -303,6 +306,130 @@ window.saveReportToFirestore = async function saveReportToFirestore(reportData) 
   return { id: created.id };
 };
 
+function asMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  if (typeof value.seconds === "number") return value.seconds * 1000;
+  return 0;
+}
+
+function formatReportDate(value) {
+  var ms = asMillis(value);
+  if (!ms) return "Sin fecha";
+  return new Date(ms).toLocaleString("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function escapeHtml(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderReportsInPanel(reportDocs) {
+  var container = $("rpt-content");
+  if (!container) return;
+
+  if (!reportDocs.length) {
+    container.innerHTML =
+      '<div class="empty"><div class="empty-ico">📋</div>No hay reportes guardados todavía</div>';
+    return;
+  }
+
+  var cards = reportDocs
+    .map(function (item) {
+      var data = item.data;
+      var checklist = data.checklist && data.checklist.name ? data.checklist.name : "—";
+      var tecnico = data.tecnicoNombre || "—";
+      var fecha = formatReportDate(data.fecha);
+      var observaciones = (data.observaciones || "").trim();
+      var preview = observaciones ? escapeHtml(observaciones).slice(0, 180) : "Sin observaciones";
+      var progreso =
+        data.respuestas &&
+        data.respuestas.progreso &&
+        typeof data.respuestas.progreso.porcentaje === "number"
+          ? data.respuestas.progreso.porcentaje + "%"
+          : "—";
+
+      return (
+        '<div class="card">' +
+        '<div class="card-head">' +
+        '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<div class="card-ico" style="background:rgba(59,130,246,.1);">📄</div>' +
+        "<div>" +
+        '<div class="card-title">' + escapeHtml(data.ordenId || item.id) + "</div>" +
+        '<div class="card-sub">' + escapeHtml(checklist) + "</div>" +
+        "</div>" +
+        "</div>" +
+        "</div>" +
+        '<div style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">' +
+        "<span>👷 " + escapeHtml(tecnico) + "</span>" +
+        "<span>📅 " + escapeHtml(fecha) + "</span>" +
+        "<span>📈 Progreso: " + escapeHtml(progreso) + "</span>" +
+        "</div>" +
+        '<div style="margin-top:10px;font-size:12px;color:var(--muted2);line-height:1.45;">' +
+        preview +
+        "</div>" +
+        '<div class="card-meta"><span class="chip">ID: ' +
+        escapeHtml(item.id) +
+        "</span></div>" +
+        "</div>"
+      );
+    })
+    .join("");
+
+  container.innerHTML = '<div class="cards">' + cards + "</div>";
+}
+
+window.loadReportsIntoPanel = async function loadReportsIntoPanel() {
+  if (!firebaseAvailable || !auth.currentUser) return;
+
+  var container = $("rpt-content");
+  if (!container) return;
+  container.innerHTML =
+    '<div class="empty"><div class="empty-ico">⏳</div>Cargando reportes...</div>';
+
+  try {
+    var user = auth.currentUser;
+    var profile = currentUserProfile;
+    if (!profile || !profile.role) {
+      profile = (await getProfile(user.uid)) || {};
+      currentUserProfile = profile;
+    }
+
+    var snap;
+    if (profile.role === "administrador") {
+      snap = await getDocs(collection(db, "reportes"));
+    } else {
+      snap = await getDocs(
+        query(collection(db, "reportes"), where("uid", "==", user.uid))
+      );
+    }
+
+    var docs = snap.docs
+      .map(function (d) {
+        return { id: d.id, data: d.data() || {} };
+      })
+      .sort(function (a, b) {
+        return asMillis(b.data.fecha) - asMillis(a.data.fecha);
+      });
+
+    renderReportsInPanel(docs);
+  } catch (err) {
+    console.error("Error cargando reportes:", err);
+    container.innerHTML =
+      '<div class="empty"><div class="empty-ico">⚠️</div>No se pudieron cargar los reportes</div>';
+  }
+};
+
 setupEvents();
 
 if (!firebaseAvailable) {
@@ -317,5 +444,8 @@ if (!firebaseAvailable) {
 } else {
   onAuthStateChanged(auth, function (user) {
     loadUserState(user);
+    if (user) {
+      window.loadReportsIntoPanel();
+    }
   });
 }

@@ -738,6 +738,9 @@ function goTo(page,el){
   document.getElementById('pg-actions').innerHTML=a;
   var renders={dashboard:renderDashboard,orders:renderOrders,clients:renderClients,branches:renderBranches,technicians:renderTechs,equipment:renderEquipment,checklists:renderChecklists,tech:renderTechView};
   if(renders[page]) renders[page]();
+  if(page==='report' && typeof window.loadReportsIntoPanel==='function'){
+    window.loadReportsIntoPanel();
+  }
 }
 
 // ══════════════ DASHBOARD ══════════════
