@@ -348,8 +348,16 @@ window.uploadEvidenceImage = async function uploadEvidenceImage(file, context) {
     ext;
 
   var storageRef = ref(storage, filePath);
+  console.log("[uploadEvidenceImage] Subiendo archivo a Storage:", {
+    path: filePath,
+    name: file.name || "",
+    size: file.size || 0,
+    type: file.type || "",
+  });
   await uploadBytes(storageRef, file);
-  return await getDownloadURL(storageRef);
+  var downloadUrl = await getDownloadURL(storageRef);
+  console.log("[uploadEvidenceImage] URL generada correctamente:", downloadUrl);
+  return downloadUrl;
 };
 
 function asMillis(value) {

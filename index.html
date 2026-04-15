@@ -1095,6 +1095,31 @@ var selectedPhotoSlot=null;
 var pendingPhotos=[null,null,null];
 var closingOrderInProgress=false;
 
+function withTimeout(promise,ms,label){
+  return new Promise(function(resolve,reject){
+    var settled=false;
+    var timer=setTimeout(function(){
+      if(settled) return;
+      settled=true;
+      reject(new Error((label||'Operación')+' excedió el tiempo de espera'));
+    },ms);
+
+    Promise.resolve(promise)
+      .then(function(value){
+        if(settled) return;
+        settled=true;
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(function(err){
+        if(settled) return;
+        settled=true;
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 function resetPhotoSlots(){
   pendingPhotos=[null,null,null];
   selectedPhotoSlot=null;
@@ -1149,11 +1174,19 @@ async function uploadPendingPhotos(orderId){
     throw new Error('Uploader de Storage no disponible');
   }
 
+  console.log('[closeOrder] Iniciando subida de imágenes. Total:',filesToUpload.length);
   var uploadedUrls=await Promise.all(filesToUpload.map(async function(item){
-    var url=await window.uploadEvidenceImage(item.file,{orderId:orderId,slotIndex:item.slotIndex});
+    console.log('[closeOrder] Subiendo imagen slot',item.slotIndex,'nombre:',item.file && item.file.name ? item.file.name : 'sin-nombre');
+    var url=await withTimeout(
+      window.uploadEvidenceImage(item.file,{orderId:orderId,slotIndex:item.slotIndex}),
+      60000,
+      'Subida de imagen'
+    );
+    console.log('[closeOrder] Imagen subida slot',item.slotIndex,'url:',url);
     pendingPhotos[item.slotIndex].url=url;
     return url;
   }));
+  console.log('[closeOrder] Subida de imágenes completada. URLs:',uploadedUrls.length);
 
   return uploadedUrls;
 }
@@ -1232,11 +1265,17 @@ async function closeOrder(){
 
   var ck=gCl(o.clId),tc=gTech(o.techId),captured=collectChecklistReportData(o,total,done),photoUrls=[];
   try{
+    console.log('[closeOrder] Inicio de cierre de orden:',o.id);
+    console.log('[closeOrder] Fotos seleccionadas:',pendingPhotos.filter(function(p){ return !!(p&&p.file); }).length);
+
     // 1) Subir todas las imágenes y resolver URLs
-    photoUrls=await uploadPendingPhotos(o.id);
+    console.log('[closeOrder] Antes de subir imágenes');
+    photoUrls=await withTimeout(uploadPendingPhotos(o.id),120000,'Subida de imágenes');
+    console.log('[closeOrder] Después de subir imágenes. URLs obtenidas:',photoUrls.length);
 
     // 2) Guardar reporte con array fotos ya resuelto
-    await window.saveReportToFirestore({
+    console.log('[closeOrder] Antes de guardar reporte en Firestore');
+    await withTimeout(window.saveReportToFirestore({
       ordenId:o.id,
       tecnicoId:o.techId,
       tecnicoNombre:tc?tc.name:'',
@@ -1244,7 +1283,8 @@ async function closeOrder(){
       respuestas:captured.respuestas,
       observaciones:captured.observaciones||o.desc||'',
       fotos:photoUrls
-    });
+    }),60000,'Guardado de reporte');
+    console.log('[closeOrder] Después de guardar reporte en Firestore');
 
     o.status='done';
     document.getElementById('wd-wrap').style.display='none';
@@ -1254,7 +1294,10 @@ async function closeOrder(){
     toast('✅ Reporte generado y guardado');
   }catch(err){
     console.error('Error en cierre de orden:',err);
-    if(String((err&&err.message)||'').toLowerCase().indexOf('storage')!==-1){
+    var msg=String((err&&err.message)||'').toLowerCase();
+    if(msg.indexOf('tiempo de espera')!==-1 || msg.indexOf('excedió')!==-1){
+      toast('❌ Tiempo de espera agotado al guardar. Reintenta.');
+    }else if(msg.indexOf('storage')!==-1){
       toast('❌ Falló la subida de imágenes. Intenta de nuevo.');
     }else{
       toast('❌ No se pudo cerrar la orden. Intenta nuevamente.');
