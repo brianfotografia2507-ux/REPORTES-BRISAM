@@ -1263,28 +1263,37 @@ async function closeOrder(){
   var closeBtn=document.querySelector('#wd-wrap .btn.btn-success');
   if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
 
-  var ck=gCl(o.clId),tc=gTech(o.techId),captured=collectChecklistReportData(o,total,done),photoUrls=[];
+  var ck=gCl(o.clId),tc=gTech(o.techId),captured=collectChecklistReportData(o,total,done);
   try{
-    console.log('[closeOrder] Inicio de cierre de orden:',o.id);
-    console.log('[closeOrder] Fotos seleccionadas:',pendingPhotos.filter(function(p){ return !!(p&&p.file); }).length);
+    var imagenes=pendingPhotos
+      .map(function(p,idx){ return p && p.file ? {slotIndex:idx,file:p.file} : null; })
+      .filter(function(p){ return !!p; });
+    if(imagenes.length && typeof window.uploadEvidenceImage!=='function'){
+      throw new Error('uploadEvidenceImage no está disponible');
+    }
 
-    // 1) Subir todas las imágenes y resolver URLs
-    console.log('[closeOrder] Antes de subir imágenes');
-    photoUrls=await withTimeout(uploadPendingPhotos(o.id),120000,'Subida de imágenes');
-    console.log('[closeOrder] Después de subir imágenes. URLs obtenidas:',photoUrls.length);
+    console.log('[closeOrder] Inicio de subida. Imágenes:',imagenes.length);
+    var urls=await Promise.all(imagenes.map(async function(img){
+      var url=await window.uploadEvidenceImage(img.file,{orderId:o.id,slotIndex:img.slotIndex});
+      if(pendingPhotos[img.slotIndex]) pendingPhotos[img.slotIndex].url=url;
+      console.log('[closeOrder] Imagen subida slot',img.slotIndex,'url:',url);
+      return url;
+    }));
+    console.log('[closeOrder] Fin de subida. URLs:',urls.length);
 
-    // 2) Guardar reporte con array fotos ya resuelto
-    console.log('[closeOrder] Antes de guardar reporte en Firestore');
-    await withTimeout(window.saveReportToFirestore({
+    var reportData={
       ordenId:o.id,
       tecnicoId:o.techId,
       tecnicoNombre:tc?tc.name:'',
       checklist:{id:o.clId,name:ck?ck.name:'—'},
       respuestas:captured.respuestas,
       observaciones:captured.observaciones||o.desc||'',
-      fotos:photoUrls
-    }),60000,'Guardado de reporte');
-    console.log('[closeOrder] Después de guardar reporte en Firestore');
+      fotos:urls
+    };
+
+    console.log('[closeOrder] Antes de guardar reporte');
+    await window.saveReportToFirestore(reportData);
+    console.log('[closeOrder] Reporte guardado correctamente');
 
     o.status='done';
     document.getElementById('wd-wrap').style.display='none';
@@ -1294,14 +1303,7 @@ async function closeOrder(){
     toast('✅ Reporte generado y guardado');
   }catch(err){
     console.error('Error en cierre de orden:',err);
-    var msg=String((err&&err.message)||'').toLowerCase();
-    if(msg.indexOf('tiempo de espera')!==-1 || msg.indexOf('excedió')!==-1){
-      toast('❌ Tiempo de espera agotado al guardar. Reintenta.');
-    }else if(msg.indexOf('storage')!==-1){
-      toast('❌ Falló la subida de imágenes. Intenta de nuevo.');
-    }else{
-      toast('❌ No se pudo cerrar la orden. Intenta nuevamente.');
-    }
+    toast('❌ No se pudo cerrar la orden. Revisa la subida de imágenes e intenta nuevamente.');
   }finally{
     closingOrderInProgress=false;
     if(closeBtn){ closeBtn.disabled=false; closeBtn.style.opacity=''; closeBtn.textContent='✓ Cerrar Orden y Generar Reporte'; }
