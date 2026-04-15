@@ -1,6 +1,7 @@
 import {
   auth,
   db,
+  storage,
   firebaseReady
 } from "./firebase-config.js";
 import {
@@ -17,6 +18,11 @@ import {
   setDoc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+import {
+  getDownloadURL,
+  ref,
+  uploadBytes,
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-storage.js";
 
 var roleLandingPage = {
   tecnico: "tech",
@@ -31,6 +37,7 @@ var roleAllowedPages = {
 var currentRole = null;
 var currentUserProfile = null;
 var firebaseAvailable = !!firebaseReady && !!auth && !!db;
+var storageReady = !!storage;
 var firestoreReadApiPromise = null;
 var allLoadedReports = [];
 var reportFilters = {
@@ -310,6 +317,41 @@ window.saveReportToFirestore = async function saveReportToFirestore(reportData) 
   return { id: created.id };
 };
 
+window.uploadEvidenceImage = async function uploadEvidenceImage(file, context) {
+  if (!firebaseAvailable || !storageReady) {
+    throw new Error("Firebase Storage no está disponible.");
+  }
+  if (!file) {
+    throw new Error("Archivo inválido.");
+  }
+
+  var user = auth.currentUser;
+  if (!user) {
+    throw new Error("Debes iniciar sesión para subir fotos.");
+  }
+
+  var ext = "";
+  var dot = file.name ? file.name.lastIndexOf(".") : -1;
+  if (dot > -1) ext = file.name.slice(dot).toLowerCase();
+
+  var orderId = (context && context.orderId) || "sin-orden";
+  var safeOrderId = String(orderId).replace(/[^a-zA-Z0-9_-]/g, "_");
+  var filePath =
+    "reportes/" +
+    user.uid +
+    "/" +
+    safeOrderId +
+    "/" +
+    Date.now() +
+    "_" +
+    Math.random().toString(36).slice(2, 8) +
+    ext;
+
+  var storageRef = ref(storage, filePath);
+  await uploadBytes(storageRef, file);
+  return await getDownloadURL(storageRef);
+};
+
 function asMillis(value) {
   if (!value) return 0;
   if (typeof value.toDate === "function") return value.toDate().getTime();
@@ -462,6 +504,20 @@ function renderReportsInPanel(reportDocs) {
         typeof data.respuestas.progreso.porcentaje === "number"
           ? data.respuestas.progreso.porcentaje + "%"
           : "—";
+      var fotos = Array.isArray(data.fotos) ? data.fotos.filter(Boolean).slice(0, 3) : [];
+      var fotosHtml = fotos.length
+        ? '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">' +
+          fotos
+            .map(function (url) {
+              return (
+                '<img src="' +
+                escapeHtml(url) +
+                '" alt="Foto evidencia" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">'
+              );
+            })
+            .join("") +
+          "</div>"
+        : "";
 
       return (
         '<div class="card">' +
@@ -482,6 +538,7 @@ function renderReportsInPanel(reportDocs) {
         '<div style="margin-top:10px;font-size:12px;color:var(--muted2);line-height:1.45;">' +
         preview +
         "</div>" +
+        fotosHtml +
         '<div class="card-meta"><span class="chip">ID: ' +
         escapeHtml(item.id) +
         "</span></div>" +

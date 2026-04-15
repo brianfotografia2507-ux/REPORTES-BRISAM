@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+import { getStorage } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-storage.js";
 
 // Reemplaza estos valores con la configuración de tu proyecto Firebase.
 const firebaseConfig = {
@@ -38,12 +39,19 @@ let firebaseReady = hasRealFirebaseConfig(firebaseConfig);
 let app = null;
 let auth = null;
 let db = null;
+let storage = null;
 
 if (firebaseReady) {
   try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
+    try {
+      storage = getStorage(app);
+    } catch (storageError) {
+      console.error("Error inicializando Firebase Storage:", storageError);
+      storage = null;
+    }
   } catch (error) {
     firebaseReady = false;
     console.error("Error inicializando Firebase:", error);
@@ -54,4 +62,4 @@ if (firebaseReady) {
   );
 }
 
-export { app, auth, db, firebaseReady };
+export { app, auth, db, storage, firebaseReady };

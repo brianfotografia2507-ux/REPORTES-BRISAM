@@ -431,10 +431,11 @@ canvas.sig.signed{border-color:var(--green);}
           <div id="wd-dynamic"></div>
           <div class="sec" style="margin-top:18px;">Evidencia fotográfica</div>
           <div class="ph-grid">
-            <div class="ph-slot" onclick="addPhoto(this)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
-            <div class="ph-slot" onclick="addPhoto(this)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
-            <div class="ph-slot" onclick="addPhoto(this)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
+            <div class="ph-slot" data-slot-index="0" onclick="addPhoto(this,0)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
+            <div class="ph-slot" data-slot-index="1" onclick="addPhoto(this,1)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
+            <div class="ph-slot" data-slot-index="2" onclick="addPhoto(this,2)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
           </div>
+          <input id="ph-file" type="file" accept="image/*" style="display:none;">
           <div class="sec" style="margin-top:18px;">Firma del responsable</div>
           <canvas class="sig" id="sig-c" width="600" height="110"></canvas>
           <div style="display:flex;gap:8px;margin-top:7px;align-items:center;">
@@ -692,7 +693,7 @@ var DB = {
   nextNum:4
 };
 
-var curOrderId=null, chkState={}, sigDraw=false, sigSigned=false, photoCnt=0;
+var curOrderId=null, chkState={}, sigDraw=false, sigSigned=false;
 var tmpSections=[];
 
 // ══════════════ HELPERS ══════════════
@@ -1062,9 +1063,9 @@ function openWork(id){
   }
 
   document.getElementById('wd-dynamic').innerHTML=dynHtml;
-  sigSigned=false; photoCnt=0;
+  sigSigned=false;
   document.getElementById('sig-st').textContent='Sin firmar';
-  document.querySelectorAll('.ph-slot').forEach(function(s){ s.classList.remove('filled'); s.innerHTML='<span style="font-size:20px;">📷</span><span>Foto</span>'; });
+  resetPhotoSlots();
   clearSig();
   updateProg();
   o.status='progress';
@@ -1090,8 +1091,64 @@ function updateProg(){
   document.getElementById('wd-fill').style.width=pct+'%';
 }
 
-var IMGS=['data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect fill="%23374151" width="80" height="80"/><text x="40" y="48" text-anchor="middle" fill="%236b7280" font-size="9" font-family="sans-serif">Compresor</text></svg>','data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect fill="%231f2937" width="80" height="80"/><text x="40" y="48" text-anchor="middle" fill="%236b7280" font-size="9" font-family="sans-serif">Filtro A/C</text></svg>','data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect fill="%23111827" width="80" height="80"/><text x="40" y="48" text-anchor="middle" fill="%236b7280" font-size="9" font-family="sans-serif">Panel Elec.</text></svg>'];
-function addPhoto(slot){ if(slot.classList.contains('filled'))return; slot.classList.add('filled'); slot.innerHTML='<img src="'+IMGS[photoCnt%3]+'" alt="">'; photoCnt++; toast('📷 Foto agregada'); }
+var selectedPhotoSlot=null;
+var pendingPhotos=[null,null,null];
+
+function resetPhotoSlots(){
+  pendingPhotos=[null,null,null];
+  selectedPhotoSlot=null;
+  document.querySelectorAll('.ph-slot').forEach(function(s){
+    s.classList.remove('filled');
+    s.innerHTML='<span style="font-size:20px;">📷</span><span>Foto</span>';
+  });
+}
+
+function addPhoto(slot,slotIndex){
+  if(slotIndex<0 || slotIndex>2) return;
+  selectedPhotoSlot={el:slot,index:slotIndex};
+  var input=document.getElementById('ph-file');
+  if(!input) return;
+  input.click();
+}
+
+function handlePhotoPicked(ev){
+  var file=ev.target.files && ev.target.files[0];
+  if(!file || !selectedPhotoSlot) return;
+  if(file.type.indexOf('image/')!==0){ toast('⚠️ Selecciona una imagen válida'); ev.target.value=''; return; }
+
+  var idx=selectedPhotoSlot.index;
+  var slot=selectedPhotoSlot.el;
+  pendingPhotos[idx]={file:file,url:''};
+
+  var reader=new FileReader();
+  reader.onload=function(e){
+    slot.classList.add('filled');
+    slot.innerHTML='<img src="'+e.target.result+'" alt="">';
+  };
+  reader.readAsDataURL(file);
+  toast('📷 Foto seleccionada');
+  ev.target.value='';
+}
+
+function bindPhotoInput(){
+  var input=document.getElementById('ph-file');
+  if(!input) return;
+  input.removeEventListener('change',handlePhotoPicked);
+  input.addEventListener('change',handlePhotoPicked);
+}
+
+async function uploadPendingPhotos(orderId){
+  if(typeof window.uploadEvidenceImage!=='function') throw new Error('Uploader de Storage no disponible');
+  var urls=[];
+  for(var i=0;i<pendingPhotos.length;i++){
+    var p=pendingPhotos[i];
+    if(!p || !p.file) continue;
+    var up=await window.uploadEvidenceImage(p.file,{orderId:orderId,slotIndex:i});
+    p.url=up;
+    urls.push(up);
+  }
+  return urls;
+}
 
 function initSig(){
   var c=document.getElementById('sig-c'),ctx=c.getContext('2d');
@@ -1160,7 +1217,14 @@ async function closeOrder(){
     return;
   }
 
-  var ck=gCl(o.clId),tc=gTech(o.techId),captured=collectChecklistReportData(o,total,done);
+  var ck=gCl(o.clId),tc=gTech(o.techId),captured=collectChecklistReportData(o,total,done),photoUrls=[];
+  try{
+    photoUrls=await uploadPendingPhotos(o.id);
+  }catch(upErr){
+    console.error('Error subiendo fotos a Storage:',upErr);
+    toast('❌ No se pudieron subir las fotos');
+    return;
+  }
   try{
     await window.saveReportToFirestore({
       ordenId:o.id,
@@ -1168,7 +1232,8 @@ async function closeOrder(){
       tecnicoNombre:tc?tc.name:'',
       checklist:{id:o.clId,name:ck?ck.name:'—'},
       respuestas:captured.respuestas,
-      observaciones:captured.observaciones||o.desc||''
+      observaciones:captured.observaciones||o.desc||'',
+      fotos:photoUrls
     });
   }catch(err){
     console.error('Error guardando reporte en Firestore:',err);
@@ -1249,6 +1314,7 @@ function buildReport(o){
     +'</div>';
 }
 
+bindPhotoInput();
 initSig();
 renderDashboard();
 </script>
