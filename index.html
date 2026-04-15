@@ -1093,6 +1093,7 @@ function updateProg(){
 
 var selectedPhotoSlot=null;
 var pendingPhotos=[null,null,null];
+var closingOrderInProgress=false;
 
 function resetPhotoSlots(){
   pendingPhotos=[null,null,null];
@@ -1138,16 +1139,23 @@ function bindPhotoInput(){
 }
 
 async function uploadPendingPhotos(orderId){
-  if(typeof window.uploadEvidenceImage!=='function') throw new Error('Uploader de Storage no disponible');
-  var urls=[];
-  for(var i=0;i<pendingPhotos.length;i++){
-    var p=pendingPhotos[i];
-    if(!p || !p.file) continue;
-    var up=await window.uploadEvidenceImage(p.file,{orderId:orderId,slotIndex:i});
-    p.url=up;
-    urls.push(up);
+  var filesToUpload=pendingPhotos
+    .map(function(p,idx){ return p && p.file ? {slotIndex:idx,file:p.file} : null; })
+    .filter(function(p){ return !!p; });
+
+  if(!filesToUpload.length) return [];
+
+  if(typeof window.uploadEvidenceImage!=='function'){
+    throw new Error('Uploader de Storage no disponible');
   }
-  return urls;
+
+  var uploadedUrls=await Promise.all(filesToUpload.map(async function(item){
+    var url=await window.uploadEvidenceImage(item.file,{orderId:orderId,slotIndex:item.slotIndex});
+    pendingPhotos[item.slotIndex].url=url;
+    return url;
+  }));
+
+  return uploadedUrls;
 }
 
 function initSig(){
@@ -1206,6 +1214,7 @@ function collectChecklistReportData(order,total,done){
 }
 
 async function closeOrder(){
+  if(closingOrderInProgress){ return; }
   var keys=Object.keys(chkState),total=keys.length,done=keys.filter(function(k){return chkState[k];}).length;
   if(done<Math.ceil(total*0.5)){toast('⚠️ Completa al menos el 50% del check-list');return;}
   if(!sigSigned){toast('✏️ Se requiere la firma del responsable');return;}
@@ -1217,15 +1226,16 @@ async function closeOrder(){
     return;
   }
 
+  closingOrderInProgress=true;
+  var closeBtn=document.querySelector('#wd-wrap .btn.btn-success');
+  if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
+
   var ck=gCl(o.clId),tc=gTech(o.techId),captured=collectChecklistReportData(o,total,done),photoUrls=[];
   try{
+    // 1) Subir todas las imágenes y resolver URLs
     photoUrls=await uploadPendingPhotos(o.id);
-  }catch(upErr){
-    console.error('Error subiendo fotos a Storage:',upErr);
-    toast('❌ No se pudieron subir las fotos');
-    return;
-  }
-  try{
+
+    // 2) Guardar reporte con array fotos ya resuelto
     await window.saveReportToFirestore({
       ordenId:o.id,
       tecnicoId:o.techId,
@@ -1235,18 +1245,24 @@ async function closeOrder(){
       observaciones:captured.observaciones||o.desc||'',
       fotos:photoUrls
     });
-  }catch(err){
-    console.error('Error guardando reporte en Firestore:',err);
-    toast('❌ No se pudo guardar el reporte en Firebase');
-    return;
-  }
 
-  o.status='done';
-  document.getElementById('wd-wrap').style.display='none';
-  buildReport(o);
-  goTo('report',document.getElementById('ni-report'));
-  renderTechView(); renderDashboard();
-  toast('✅ Reporte generado y guardado');
+    o.status='done';
+    document.getElementById('wd-wrap').style.display='none';
+    buildReport(o);
+    goTo('report',document.getElementById('ni-report'));
+    renderTechView(); renderDashboard();
+    toast('✅ Reporte generado y guardado');
+  }catch(err){
+    console.error('Error en cierre de orden:',err);
+    if(String((err&&err.message)||'').toLowerCase().indexOf('storage')!==-1){
+      toast('❌ Falló la subida de imágenes. Intenta de nuevo.');
+    }else{
+      toast('❌ No se pudo cerrar la orden. Intenta nuevamente.');
+    }
+  }finally{
+    closingOrderInProgress=false;
+    if(closeBtn){ closeBtn.disabled=false; closeBtn.style.opacity=''; closeBtn.textContent='✓ Cerrar Orden y Generar Reporte'; }
+  }
 }
 
 function buildReport(o){
