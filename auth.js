@@ -46,6 +46,31 @@ var reportFilters = {
   to: "",
 };
 
+function withTimeout(promise, ms, label) {
+  return new Promise(function (resolve, reject) {
+    var settled = false;
+    var timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      reject(new Error((label || "Operación") + " excedió el tiempo de espera"));
+    }, ms);
+
+    Promise.resolve(promise)
+      .then(function (value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(function (err) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 function $(id) {
   return document.getElementById(id);
 }
@@ -313,7 +338,13 @@ window.saveReportToFirestore = async function saveReportToFirestore(reportData) 
   payload.userEmail = user.email || "";
   payload.userRole = profile.role || "";
 
+  console.log("[saveReportToFirestore] Guardando reporte en Firestore:", {
+    ordenId: payload.ordenId || "",
+    fotos: Array.isArray(payload.fotos) ? payload.fotos.length : 0,
+    tecnicoNombre: payload.tecnicoNombre || "",
+  });
   var created = await addDoc(collection(db, "reportes"), payload);
+  console.log("[saveReportToFirestore] Reporte guardado con id:", created.id);
   return { id: created.id };
 };
 
@@ -354,8 +385,17 @@ window.uploadEvidenceImage = async function uploadEvidenceImage(file, context) {
     size: file.size || 0,
     type: file.type || "",
   });
-  await uploadBytes(storageRef, file);
-  var downloadUrl = await getDownloadURL(storageRef);
+  await withTimeout(
+    uploadBytes(storageRef, file),
+    60000,
+    "uploadBytes en Firebase Storage"
+  );
+  console.log("[uploadEvidenceImage] uploadBytes completado:", filePath);
+  var downloadUrl = await withTimeout(
+    getDownloadURL(storageRef),
+    30000,
+    "getDownloadURL en Firebase Storage"
+  );
   console.log("[uploadEvidenceImage] URL generada correctamente:", downloadUrl);
   return downloadUrl;
 };
