@@ -32,6 +32,12 @@ var currentRole = null;
 var currentUserProfile = null;
 var firebaseAvailable = !!firebaseReady && !!auth && !!db;
 var firestoreReadApiPromise = null;
+var allLoadedReports = [];
+var reportFilters = {
+  tecnico: "",
+  from: "",
+  to: "",
+};
 
 function $(id) {
   return document.getElementById(id);
@@ -332,6 +338,48 @@ function escapeHtml(text) {
     .replace(/'/g, "&#39;");
 }
 
+function reportDayStart(value) {
+  if (!value) return 0;
+  var d = new Date(value + "T00:00:00");
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+function reportDayEnd(value) {
+  if (!value) return 0;
+  var d = new Date(value + "T23:59:59");
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+function getUniqueTechnicians(reportDocs) {
+  var names = {};
+  reportDocs.forEach(function (item) {
+    var name = (item.data && item.data.tecnicoNombre) || "";
+    if (name) names[name] = true;
+  });
+  return Object.keys(names).sort();
+}
+
+function applyReportFilters(reportDocs) {
+  var base = reportDocs || [];
+  var fromMs = reportDayStart(reportFilters.from);
+  var toMs = reportDayEnd(reportFilters.to);
+  var tech = reportFilters.tecnico;
+
+  return base
+    .filter(function (item) {
+      var data = item.data || {};
+      var ms = asMillis(data.fecha);
+      if (tech && data.tecnicoNombre !== tech) return false;
+      if (fromMs && ms && ms < fromMs) return false;
+      if (toMs && ms && ms > toMs) return false;
+      if ((fromMs || toMs) && !ms) return false;
+      return true;
+    })
+    .sort(function (a, b) {
+      return asMillis(b.data.fecha) - asMillis(a.data.fecha);
+    });
+}
+
 async function getFirestoreReadApi() {
   if (firestoreReadApiPromise) {
     return firestoreReadApiPromise;
@@ -359,13 +407,48 @@ function renderReportsInPanel(reportDocs) {
   var container = $("rpt-content");
   if (!container) return;
 
-  if (!reportDocs.length) {
+  var filtered = applyReportFilters(reportDocs);
+  var showAdminFilters = currentRole === "administrador";
+  var technicians = getUniqueTechnicians(reportDocs);
+  var filtersHtml =
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
+    (showAdminFilters
+      ? '<select class="fs" id="rp-filter-tech" style="width:220px;">' +
+        '<option value="">— Todos los técnicos —</option>' +
+        technicians
+          .map(function (name) {
+            return (
+              '<option value="' +
+              escapeHtml(name) +
+              '"' +
+              (reportFilters.tecnico === name ? " selected" : "") +
+              ">" +
+              escapeHtml(name) +
+              "</option>"
+            );
+          })
+          .join("") +
+        "</select>"
+      : "") +
+    '<input class="fi" id="rp-filter-from" type="date" value="' +
+    escapeHtml(reportFilters.from) +
+    '" style="width:180px;">' +
+    '<input class="fi" id="rp-filter-to" type="date" value="' +
+    escapeHtml(reportFilters.to) +
+    '" style="width:180px;">' +
+    '<button class="btn btn-ghost btn-sm" id="rp-filter-clear">Limpiar filtros</button>' +
+    '<span class="chip">Orden: más recientes primero</span>' +
+    "</div>";
+
+  if (!filtered.length) {
     container.innerHTML =
-      '<div class="empty"><div class="empty-ico">📋</div>No hay reportes guardados todavía</div>';
+      filtersHtml +
+      '<div class="empty"><div class="empty-ico">📋</div>No hay reportes para esos filtros</div>';
+    wireReportFilterEvents(showAdminFilters);
     return;
   }
 
-  var cards = reportDocs
+  var cards = filtered
     .map(function (item) {
       var data = item.data;
       var checklist = data.checklist && data.checklist.name ? data.checklist.name : "—";
@@ -407,7 +490,42 @@ function renderReportsInPanel(reportDocs) {
     })
     .join("");
 
-  container.innerHTML = '<div class="cards">' + cards + "</div>";
+  container.innerHTML = filtersHtml + '<div class="cards">' + cards + "</div>";
+  wireReportFilterEvents(showAdminFilters);
+}
+
+function wireReportFilterEvents(showAdminFilters) {
+  var fromInput = $("rp-filter-from");
+  var toInput = $("rp-filter-to");
+  var clearBtn = $("rp-filter-clear");
+  var techSelect = $("rp-filter-tech");
+
+  if (showAdminFilters && techSelect) {
+    techSelect.onchange = function () {
+      reportFilters.tecnico = this.value || "";
+      renderReportsInPanel(allLoadedReports);
+    };
+  }
+  if (fromInput) {
+    fromInput.onchange = function () {
+      reportFilters.from = this.value || "";
+      renderReportsInPanel(allLoadedReports);
+    };
+  }
+  if (toInput) {
+    toInput.onchange = function () {
+      reportFilters.to = this.value || "";
+      renderReportsInPanel(allLoadedReports);
+    };
+  }
+  if (clearBtn) {
+    clearBtn.onclick = function () {
+      reportFilters.tecnico = "";
+      reportFilters.from = "";
+      reportFilters.to = "";
+      renderReportsInPanel(allLoadedReports);
+    };
+  }
 }
 
 window.loadReportsIntoPanel = async function loadReportsIntoPanel() {
@@ -443,11 +561,9 @@ window.loadReportsIntoPanel = async function loadReportsIntoPanel() {
     var docs = snap.docs
       .map(function (d) {
         return { id: d.id, data: d.data() || {} };
-      })
-      .sort(function (a, b) {
-        return asMillis(b.data.fecha) - asMillis(a.data.fecha);
       });
 
+    allLoadedReports = docs;
     renderReportsInPanel(docs);
   } catch (err) {
     console.error("Error cargando reportes:", err);
