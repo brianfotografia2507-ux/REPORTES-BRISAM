@@ -614,6 +614,7 @@ canvas.sig.signed{border-color:var(--green);}
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 // ══════════════ DATA ══════════════
 var DB = {
@@ -1094,6 +1095,8 @@ function updateProg(){
 var selectedPhotoSlot=null;
 var pendingPhotos=[null,null,null];
 var closingOrderInProgress=false;
+var lastGeneratedPdfUrl='';
+var lastGeneratedPdfName='';
 
 function withTimeout(promise,ms,label){
   return new Promise(function(resolve,reject){
@@ -1118,6 +1121,160 @@ function withTimeout(promise,ms,label){
         reject(err);
       });
   });
+}
+
+function getJsPdfCtor(){
+  if(window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
+  if(typeof window.jsPDF==='function') return window.jsPDF;
+  return null;
+}
+
+function formatPdfStamp(dateValue){
+  var d=dateValue instanceof Date?dateValue:new Date(dateValue||Date.now());
+  if(isNaN(d.getTime())) d=new Date();
+  return d.toLocaleString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
+function fileSafeStamp(dateValue){
+  var d=dateValue instanceof Date?dateValue:new Date(dateValue||Date.now());
+  if(isNaN(d.getTime())) d=new Date();
+  var yy=d.getFullYear();
+  var mm=String(d.getMonth()+1).padStart(2,'0');
+  var dd=String(d.getDate()).padStart(2,'0');
+  var hh=String(d.getHours()).padStart(2,'0');
+  var mi=String(d.getMinutes()).padStart(2,'0');
+  return yy+mm+dd+'-'+hh+mi;
+}
+
+function writePdfBlock(doc,text,x,y,maxWidth,lineHeight){
+  var lines=doc.splitTextToSize(String(text||''),maxWidth);
+  var pageH=doc.internal.pageSize.getHeight();
+  lines.forEach(function(line){
+    if(y>pageH-12){ doc.addPage(); y=14; }
+    doc.text(line,x,y);
+    y+=lineHeight;
+  });
+  return y;
+}
+
+function buildChecklistPdfLines(respuestas){
+  var lines=[];
+  var sections=(respuestas&&respuestas.sections)||[];
+  sections.forEach(function(sec){
+    lines.push('['+(sec.title||'Sección')+']');
+    if(sec.type==='checklist'){
+      (sec.items||[]).forEach(function(item){
+        lines.push('- '+(item.text||'Ítem')+': '+(item.checked?'OK':'Pendiente'));
+      });
+    }else if(sec.type==='fields'){
+      (sec.fields||[]).forEach(function(field){
+        lines.push('- '+(field.label||field.id||'Campo')+': '+(field.value||'—'));
+      });
+    }else if(sec.type==='textarea'){
+      lines.push('- '+(sec.value||'Sin observaciones.'));
+    }
+    lines.push('');
+  });
+  return lines;
+}
+
+function createAndStoreReportPdf(pdfData){
+  var JsPdf=getJsPdfCtor();
+  if(!JsPdf) throw new Error('jsPDF no está disponible');
+
+  var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
+  var pageW=doc.internal.pageSize.getWidth();
+  var pageH=doc.internal.pageSize.getHeight();
+  var margin=12;
+  var maxW=pageW-(margin*2);
+  var y=14;
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.text('MantenPro · Reporte de Servicio',margin,y);
+  y+=7;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  y=writePdfBlock(doc,'Orden: '+(pdfData.ordenId||'—'),margin,y,maxW,5);
+  y=writePdfBlock(doc,'Fecha: '+formatPdfStamp(pdfData.fecha),margin,y,maxW,5);
+  y=writePdfBlock(doc,'Técnico: '+(pdfData.tecnicoNombre||'—'),margin,y,maxW,5);
+  y=writePdfBlock(doc,'Cliente: '+(pdfData.clienteNombre||'—')+' · Sucursal: '+(pdfData.sucursalNombre||'—'),margin,y,maxW,5);
+  y=writePdfBlock(doc,'Checklist: '+(pdfData.checklistNombre||'—'),margin,y,maxW,5);
+  y+=2;
+
+  doc.setFont('helvetica','bold');
+  doc.text('Checklist y respuestas',margin,y);
+  y+=5;
+  doc.setFont('helvetica','normal');
+  buildChecklistPdfLines(pdfData.respuestas).forEach(function(line){
+    y=writePdfBlock(doc,line||' ',margin,y,maxW,4.5);
+  });
+
+  if(y>pageH-70){ doc.addPage(); y=14; }
+  doc.setFont('helvetica','bold');
+  doc.text('Evidencia fotográfica',margin,y);
+  y+=5;
+  doc.setFont('helvetica','normal');
+  var photos=(pdfData.photoPreviews||[]).slice(0,3);
+  if(!photos.length){
+    y=writePdfBlock(doc,'Sin evidencia fotográfica adjunta.',margin,y,maxW,5);
+  }else{
+    var imgW=56,imgH=40,gap=6;
+    var rowStartY=y;
+    photos.forEach(function(src,idx){
+      var col=idx%3;
+      var x=margin+(col*(imgW+gap));
+      try{
+        var fmt=String(src).indexOf('data:image/png')===0?'PNG':'JPEG';
+        doc.addImage(src,fmt,x,rowStartY,imgW,imgH,undefined,'FAST');
+      }catch(imgErr){
+        console.error('No se pudo agregar imagen al PDF:',imgErr);
+        doc.rect(x,rowStartY,imgW,imgH);
+        doc.text('Imagen no disponible',x+4,rowStartY+8);
+      }
+    });
+    y=rowStartY+imgH+6;
+  }
+
+  if(y>pageH-35){ doc.addPage(); y=14; }
+  doc.setFont('helvetica','bold');
+  doc.text('Firma del cliente',margin,y);
+  y+=4;
+  if(pdfData.signatureData){
+    try{
+      doc.addImage(pdfData.signatureData,'PNG',margin,y,72,22,undefined,'FAST');
+    }catch(sigErr){
+      console.error('No se pudo agregar firma al PDF:',sigErr);
+      y=writePdfBlock(doc,'Firma no disponible.',margin,y,maxW,5);
+    }
+  }else{
+    y=writePdfBlock(doc,'Sin firma registrada.',margin,y,maxW,5);
+  }
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text('Generado automáticamente por MantenPro',margin,pageH-8);
+
+  var blob=doc.output('blob');
+  if(lastGeneratedPdfUrl){ URL.revokeObjectURL(lastGeneratedPdfUrl); }
+  lastGeneratedPdfUrl=URL.createObjectURL(blob);
+  lastGeneratedPdfName='Reporte-'+(pdfData.ordenId||'orden')+'-'+fileSafeStamp(pdfData.fecha)+'.pdf';
+  return {url:lastGeneratedPdfUrl,name:lastGeneratedPdfName};
+}
+
+function downloadLastReportPdf(){
+  if(!lastGeneratedPdfUrl){ toast('⚠️ No hay PDF generado todavía'); return; }
+  var a=document.createElement('a');
+  a.href=lastGeneratedPdfUrl;
+  a.download=lastGeneratedPdfName||'reporte.pdf';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function viewLastReportPdf(){
+  if(!lastGeneratedPdfUrl){ toast('⚠️ No hay PDF generado todavía'); return; }
+  window.open(lastGeneratedPdfUrl,'_blank','noopener');
 }
 
 function resetPhotoSlots(){
@@ -1263,7 +1420,7 @@ async function closeOrder(){
   var closeBtn=document.querySelector('#wd-wrap .btn.btn-success');
   if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
 
-  var ck=gCl(o.clId),tc=gTech(o.techId),captured=collectChecklistReportData(o,total,done);
+  var ck=gCl(o.clId),tc=gTech(o.techId),cl=gClient(o.clientId),br=gBranch(o.branchId),captured=collectChecklistReportData(o,total,done);
   try{
     var imagenes=pendingPhotos
       .map(function(p,idx){ return p && p.file ? {slotIndex:idx,file:p.file} : null; })
@@ -1294,6 +1451,30 @@ async function closeOrder(){
     console.log('[closeOrder] Antes de guardar reporte');
     await window.saveReportToFirestore(reportData);
     console.log('[closeOrder] Reporte guardado correctamente');
+
+    // Generación automática de PDF al cerrar orden.
+    try{
+      var photoPreviews=Array.prototype.slice.call(document.querySelectorAll('.ph-slot.filled img'))
+        .map(function(img){ return img && img.getAttribute('src') ? img.getAttribute('src') : ''; })
+        .filter(function(src){ return !!src; });
+      var signatureData=document.getElementById('sig-c').toDataURL('image/png');
+      var pdfInfo=createAndStoreReportPdf({
+        ordenId:o.id,
+        fecha:new Date(),
+        tecnicoNombre:tc?tc.name:'',
+        clienteNombre:cl?cl.name:'—',
+        sucursalNombre:br?br.name:'—',
+        checklistNombre:ck?ck.name:'—',
+        respuestas:captured.respuestas,
+        photoPreviews:photoPreviews,
+        signatureData:signatureData
+      });
+      console.log('[closeOrder] PDF generado:',pdfInfo.name);
+      downloadLastReportPdf();
+    }catch(pdfErr){
+      console.error('Error generando PDF automático:',pdfErr);
+      toast('⚠️ Reporte guardado, pero no se pudo generar el PDF');
+    }
 
     o.status='done';
     document.getElementById('wd-wrap').style.display='none';
@@ -1349,8 +1530,8 @@ function buildReport(o){
 
   document.getElementById('rpt-content').innerHTML=
     '<div style="display:flex;gap:10px;margin-bottom:16px;">'
-    +'<button class="btn btn-ghost" onclick="toast(\'📤 Enviando por WhatsApp...\')">📱 Enviar WhatsApp</button>'
-    +'<button class="btn btn-primary" onclick="toast(\'📄 Generando PDF...\')">⬇ Descargar PDF</button>'
+    +'<button class="btn btn-ghost" onclick="viewLastReportPdf()">👁 Ver PDF</button>'
+    +'<button class="btn btn-primary" onclick="downloadLastReportPdf()">⬇ Descargar PDF</button>'
     +'</div>'
     +'<div class="rpt">'
     +'<div class="rpt-head"><div><div class="rpt-brand">MantenPro</div><div class="rpt-sub">Servicios de Mantenimiento Comercial · Monterrey, NL</div></div><div class="rpt-badge">REPORTE OFICIAL</div></div>'
