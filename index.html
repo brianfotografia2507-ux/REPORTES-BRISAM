@@ -1146,36 +1146,290 @@ function fileSafeStamp(dateValue){
   return yy+mm+dd+'-'+hh+mi;
 }
 
-function writePdfBlock(doc,text,x,y,maxWidth,lineHeight){
-  var lines=doc.splitTextToSize(String(text||''),maxWidth);
-  var pageH=doc.internal.pageSize.getHeight();
+function safePdfText(value,fallback){
+  var text=String(value==null?'':value).trim();
+  if(!text) return fallback||'—';
+  return text;
+}
+
+function ensurePdfSpace(doc,y,required,layout){
+  var maxY=layout.pageH-layout.footerH;
+  if(y+required<=maxY) return y;
+  doc.addPage();
+  return layout.top;
+}
+
+function drawPdfSectionTitle(doc,layout,y,title){
+  y=ensurePdfSpace(doc,y,10,layout);
+  doc.setDrawColor(23,43,77);
+  doc.setLineWidth(0.25);
+  doc.line(layout.margin,y,layout.pageW-layout.margin,y);
+  y+=5;
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(23,43,77);
+  doc.setFontSize(10.5);
+  doc.text(String(title||'').toUpperCase(),layout.margin,y);
+  return y+2;
+}
+
+function drawPdfWrappedText(doc,layout,y,text,fontSize,lineHeight,indent){
+  var x=layout.margin+(indent||0);
+  var maxW=layout.contentW-(indent||0);
+  doc.setFontSize(fontSize||9.5);
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(38,38,38);
+  var lines=doc.splitTextToSize(safePdfText(text,'—'),maxW);
   lines.forEach(function(line){
-    if(y>pageH-12){ doc.addPage(); y=14; }
+    y=ensurePdfSpace(doc,y,lineHeight||4.4,layout);
     doc.text(line,x,y);
-    y+=lineHeight;
+    y+=(lineHeight||4.4);
   });
   return y;
 }
 
-function buildChecklistPdfLines(respuestas){
-  var lines=[];
+function extractChecklistRows(respuestas){
+  var rows=[];
   var sections=(respuestas&&respuestas.sections)||[];
   sections.forEach(function(sec){
-    lines.push('['+(sec.title||'Sección')+']');
     if(sec.type==='checklist'){
       (sec.items||[]).forEach(function(item){
-        lines.push('- '+(item.text||'Ítem')+': '+(item.checked?'OK':'Pendiente'));
+        rows.push({
+          actividad:(item.text||'Actividad')+(item.cat?' · '+item.cat:''),
+          estado:item.checked?'✓':'✗'
+        });
       });
-    }else if(sec.type==='fields'){
-      (sec.fields||[]).forEach(function(field){
-        lines.push('- '+(field.label||field.id||'Campo')+': '+(field.value||'—'));
-      });
-    }else if(sec.type==='textarea'){
-      lines.push('- '+(sec.value||'Sin observaciones.'));
     }
-    lines.push('');
   });
-  return lines;
+  return rows;
+}
+
+function drawPdfHeader(doc,layout,pdfData){
+  var y=layout.top;
+  var logoX=layout.margin;
+  var logoY=y;
+  var logoW=28;
+  var logoH=16;
+  doc.setFillColor(23,43,77);
+  doc.roundedRect(logoX,logoY,logoW,logoH,2,2,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.text('BRISAM',logoX+(logoW/2),logoY+10,{align:'center'});
+
+  doc.setTextColor(20,20,20);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(12);
+  doc.text('SERVICIOS INTEGRALES BRISAM',logoX+34,logoY+7);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text('Reporte técnico corporativo',logoX+34,logoY+12);
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.text('FECHA',layout.pageW-layout.margin,logoY+5,{align:'right'});
+  doc.setFont('helvetica','normal');
+  doc.text(formatPdfStamp(pdfData.fecha),layout.pageW-layout.margin,logoY+10,{align:'right'});
+
+  y=logoY+logoH+8;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.setTextColor(23,43,77);
+  doc.text('REPORTE DE MANTENIMIENTO',layout.margin,y);
+  y+=3;
+  doc.setDrawColor(180,188,204);
+  doc.setLineWidth(0.35);
+  doc.line(layout.margin,y,layout.pageW-layout.margin,y);
+  return y+8;
+}
+
+function drawPdfInfoGrid(doc,layout,y,pdfData){
+  var rows=[
+    [
+      {label:'FOLIO',value:safePdfText(pdfData.ordenId,'—')},
+      {label:'CLIENTE',value:safePdfText(pdfData.clienteNombre,'—')}
+    ],
+    [
+      {label:'SUCURSAL',value:safePdfText(pdfData.sucursalNombre,'—')},
+      {label:'TÉCNICO',value:safePdfText(pdfData.tecnicoNombre,'—')}
+    ],
+    [
+      {label:'TIPO DE MANTENIMIENTO',value:safePdfText(pdfData.tipoMantenimiento,'—')},
+      {label:'FECHA',value:formatPdfStamp(pdfData.fecha)}
+    ]
+  ];
+  var rowH=12;
+  var colGap=4;
+  var colW=(layout.contentW-colGap)/2;
+  rows.forEach(function(row){
+    y=ensurePdfSpace(doc,y,rowH+1,layout);
+    row.forEach(function(cell,idx){
+      var x=layout.margin+(idx*(colW+colGap));
+      doc.setDrawColor(196,203,216);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(x,y,colW,rowH,1,1);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(92,102,118);
+      doc.text(cell.label,x+2.5,y+3.5);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(9.2);
+      doc.setTextColor(26,26,26);
+      var valueLines=doc.splitTextToSize(cell.value,colW-5);
+      doc.text(valueLines[0]||'—',x+2.5,y+8.6);
+    });
+    y+=rowH+2;
+  });
+  return y;
+}
+
+function drawPdfChecklistTable(doc,layout,y,rows){
+  var colActW=layout.contentW-30;
+  var colStatusW=30;
+  function drawHeaderRow(rowY){
+    doc.setFillColor(241,244,249);
+    doc.rect(layout.margin,rowY,colActW,8,'F');
+    doc.rect(layout.margin+colActW,rowY,colStatusW,8,'F');
+    doc.setDrawColor(179,188,205);
+    doc.rect(layout.margin,rowY,colActW,8);
+    doc.rect(layout.margin+colActW,rowY,colStatusW,8);
+    doc.setFont('helvetica','bold');
+    doc.setTextColor(41,52,76);
+    doc.setFontSize(9);
+    doc.text('Actividad',layout.margin+2.5,rowY+5.2);
+    doc.text('Estado',layout.margin+colActW+(colStatusW/2),rowY+5.2,{align:'center'});
+  }
+
+  y=ensurePdfSpace(doc,y,12,layout);
+  drawHeaderRow(y);
+  y+=8;
+
+  if(!rows.length){
+    y=ensurePdfSpace(doc,y,10,layout);
+    doc.setDrawColor(210,216,226);
+    doc.rect(layout.margin,y,layout.contentW,9);
+    doc.setFont('helvetica','normal');
+    doc.setTextColor(95,103,118);
+    doc.setFontSize(9);
+    doc.text('Sin actividades de checklist registradas.',layout.margin+2.5,y+5.6);
+    return y+11;
+  }
+
+  rows.forEach(function(row){
+    var actLines=doc.splitTextToSize(row.actividad,colActW-5);
+    var rowH=Math.max(8,(actLines.length*4)+3);
+    y=ensurePdfSpace(doc,y,rowH+1,layout);
+    if(y===layout.top){
+      y=drawPdfSectionTitle(doc,layout,y-2,'Checklist');
+      drawHeaderRow(y);
+      y+=8;
+    }
+    doc.setDrawColor(210,216,226);
+    doc.rect(layout.margin,y,colActW,rowH);
+    doc.rect(layout.margin+colActW,y,colStatusW,rowH);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8.8);
+    doc.setTextColor(30,30,30);
+    doc.text(actLines,layout.margin+2.5,y+5);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(11);
+    doc.setTextColor(row.estado==='✓'?22:148,row.estado==='✓'?134:53,row.estado==='✓'?66:53);
+    doc.text(row.estado,layout.margin+colActW+(colStatusW/2),y+(rowH/2)+1,{align:'center'});
+    y+=rowH;
+  });
+  return y+2;
+}
+
+function drawPdfPhotoGrid(doc,layout,y,photos){
+  var gap=6;
+  var cols=2;
+  var photoW=(layout.contentW-gap)/cols;
+  var photoH=54;
+  if(!photos.length){
+    y=drawPdfWrappedText(doc,layout,y,'Sin evidencia fotográfica adjunta.',9.2,4.6,0);
+    return y+2;
+  }
+  photos.forEach(function(src,idx){
+    if(idx%cols===0){
+      y=ensurePdfSpace(doc,y,photoH+8,layout);
+    }
+    var col=idx%cols;
+    var x=layout.margin+(col*(photoW+gap));
+    var rowY=y;
+    doc.setDrawColor(198,205,218);
+    doc.rect(x,rowY,photoW,photoH);
+    try{
+      var fmt=String(src).indexOf('data:image/png')===0?'PNG':'JPEG';
+      doc.addImage(src,fmt,x+1,rowY+1,photoW-2,photoH-8,undefined,'FAST');
+    }catch(err){
+      console.error('No se pudo agregar imagen al PDF:',err);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(120,120,120);
+      doc.text('Imagen no disponible',x+4,rowY+photoH/2);
+    }
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.setTextColor(92,102,118);
+    doc.text('Evidencia '+(idx+1),x+2,rowY+photoH-2);
+    if(col===cols-1 || idx===photos.length-1){
+      y=rowY+photoH+4;
+    }
+  });
+  return y;
+}
+
+function drawPdfSignatures(doc,layout,y,pdfData){
+  y=ensurePdfSpace(doc,y,45,layout);
+  var gap=8;
+  var colW=(layout.contentW-gap)/2;
+  var boxH=33;
+
+  doc.setDrawColor(198,205,218);
+  doc.rect(layout.margin,y,colW,boxH);
+  doc.rect(layout.margin+colW+gap,y,colW,boxH);
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(23,43,77);
+  doc.text('TÉCNICO',layout.margin+3,y+5);
+  doc.text('CLIENTE',layout.margin+colW+gap+3,y+5);
+
+  if(pdfData.signatureData){
+    try{
+      doc.addImage(pdfData.signatureData,'PNG',layout.margin+colW+gap+4,y+7,colW-8,14,undefined,'FAST');
+    }catch(sigErr){
+      console.error('No se pudo agregar firma al PDF:',sigErr);
+    }
+  }
+
+  var lineY=y+25;
+  doc.setDrawColor(130,140,158);
+  doc.line(layout.margin+4,lineY,layout.margin+colW-4,lineY);
+  doc.line(layout.margin+colW+gap+4,lineY,layout.margin+colW+gap+colW-4,lineY);
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(70,78,90);
+  doc.text(safePdfText(pdfData.tecnicoNombre,'Firma técnico'),layout.margin+(colW/2),lineY+4,{align:'center'});
+  doc.text(safePdfText(pdfData.clienteNombre,'Firma cliente'),layout.margin+colW+gap+(colW/2),lineY+4,{align:'center'});
+  return y+boxH+3;
+}
+
+function stampPdfFooter(doc,layout,pdfData){
+  var total=doc.getNumberOfPages();
+  for(var i=1;i<=total;i++){
+    doc.setPage(i);
+    var footerY=layout.pageH-10;
+    doc.setDrawColor(210,216,226);
+    doc.setLineWidth(0.2);
+    doc.line(layout.margin,footerY-3,layout.pageW-layout.margin,footerY-3);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8.2);
+    doc.setTextColor(98,106,120);
+    doc.text('SERVICIOS INTEGRALES BRISAM · Tel. +52 81 0000 0000 · contacto@brisam.com',layout.pageW/2,footerY,{align:'center'});
+    doc.setFontSize(7.6);
+    doc.text('Página '+i+' de '+total,layout.pageW-layout.margin,footerY,{align:'right'});
+  }
 }
 
 function createAndStoreReportPdf(pdfData){
@@ -1183,77 +1437,34 @@ function createAndStoreReportPdf(pdfData){
   if(!JsPdf) throw new Error('jsPDF no está disponible');
 
   var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
-  var pageW=doc.internal.pageSize.getWidth();
-  var pageH=doc.internal.pageSize.getHeight();
-  var margin=12;
-  var maxW=pageW-(margin*2);
-  var y=14;
+  var layout={
+    pageW:doc.internal.pageSize.getWidth(),
+    pageH:doc.internal.pageSize.getHeight(),
+    margin:14,
+    top:14,
+    footerH:14
+  };
+  layout.contentW=layout.pageW-(layout.margin*2);
 
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(16);
-  doc.text('MantenPro · Reporte de Servicio',margin,y);
-  y+=7;
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(10);
-  y=writePdfBlock(doc,'Orden: '+(pdfData.ordenId||'—'),margin,y,maxW,5);
-  y=writePdfBlock(doc,'Fecha: '+formatPdfStamp(pdfData.fecha),margin,y,maxW,5);
-  y=writePdfBlock(doc,'Técnico: '+(pdfData.tecnicoNombre||'—'),margin,y,maxW,5);
-  y=writePdfBlock(doc,'Cliente: '+(pdfData.clienteNombre||'—')+' · Sucursal: '+(pdfData.sucursalNombre||'—'),margin,y,maxW,5);
-  y=writePdfBlock(doc,'Checklist: '+(pdfData.checklistNombre||'—'),margin,y,maxW,5);
+  var y=drawPdfHeader(doc,layout,pdfData);
+  y=drawPdfInfoGrid(doc,layout,y,pdfData);
+
+  y=drawPdfSectionTitle(doc,layout,y,'Descripción del servicio');
+  y=drawPdfWrappedText(doc,layout,y,safePdfText(pdfData.descripcionServicio,'Sin descripción del servicio.'),9.4,4.6,0);
+  y+=3;
+
+  y=drawPdfSectionTitle(doc,layout,y,'Checklist');
+  y=drawPdfChecklistTable(doc,layout,y,extractChecklistRows(pdfData.respuestas));
   y+=2;
 
-  doc.setFont('helvetica','bold');
-  doc.text('Checklist y respuestas',margin,y);
-  y+=5;
-  doc.setFont('helvetica','normal');
-  buildChecklistPdfLines(pdfData.respuestas).forEach(function(line){
-    y=writePdfBlock(doc,line||' ',margin,y,maxW,4.5);
-  });
+  y=drawPdfSectionTitle(doc,layout,y,'Evidencia fotográfica');
+  y=drawPdfPhotoGrid(doc,layout,y,(pdfData.photoPreviews||[]).slice(0,6));
+  y+=2;
 
-  if(y>pageH-70){ doc.addPage(); y=14; }
-  doc.setFont('helvetica','bold');
-  doc.text('Evidencia fotográfica',margin,y);
-  y+=5;
-  doc.setFont('helvetica','normal');
-  var photos=(pdfData.photoPreviews||[]).slice(0,3);
-  if(!photos.length){
-    y=writePdfBlock(doc,'Sin evidencia fotográfica adjunta.',margin,y,maxW,5);
-  }else{
-    var imgW=56,imgH=40,gap=6;
-    var rowStartY=y;
-    photos.forEach(function(src,idx){
-      var col=idx%3;
-      var x=margin+(col*(imgW+gap));
-      try{
-        var fmt=String(src).indexOf('data:image/png')===0?'PNG':'JPEG';
-        doc.addImage(src,fmt,x,rowStartY,imgW,imgH,undefined,'FAST');
-      }catch(imgErr){
-        console.error('No se pudo agregar imagen al PDF:',imgErr);
-        doc.rect(x,rowStartY,imgW,imgH);
-        doc.text('Imagen no disponible',x+4,rowStartY+8);
-      }
-    });
-    y=rowStartY+imgH+6;
-  }
+  y=drawPdfSectionTitle(doc,layout,y,'Firmas');
+  y=drawPdfSignatures(doc,layout,y,pdfData);
 
-  if(y>pageH-35){ doc.addPage(); y=14; }
-  doc.setFont('helvetica','bold');
-  doc.text('Firma del cliente',margin,y);
-  y+=4;
-  if(pdfData.signatureData){
-    try{
-      doc.addImage(pdfData.signatureData,'PNG',margin,y,72,22,undefined,'FAST');
-    }catch(sigErr){
-      console.error('No se pudo agregar firma al PDF:',sigErr);
-      y=writePdfBlock(doc,'Firma no disponible.',margin,y,maxW,5);
-    }
-  }else{
-    y=writePdfBlock(doc,'Sin firma registrada.',margin,y,maxW,5);
-  }
-
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(9);
-  doc.text('Generado automáticamente por MantenPro',margin,pageH-8);
+  stampPdfFooter(doc,layout,pdfData);
 
   var blob=doc.output('blob');
   if(lastGeneratedPdfUrl){ URL.revokeObjectURL(lastGeneratedPdfUrl); }
@@ -1464,7 +1675,9 @@ async function closeOrder(){
         tecnicoNombre:tc?tc.name:'',
         clienteNombre:cl?cl.name:'—',
         sucursalNombre:br?br.name:'—',
+        tipoMantenimiento:o.type||'—',
         checklistNombre:ck?ck.name:'—',
+        descripcionServicio:captured.observaciones||o.desc||'Sin observaciones registradas.',
         respuestas:captured.respuestas,
         photoPreviews:photoPreviews,
         signatureData:signatureData
