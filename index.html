@@ -80,6 +80,20 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;}
 .stat-val{font-family:'Syne',sans-serif;font-size:28px;font-weight:700;}
 .stat-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+.dash-filters{display:flex;gap:8px;flex-wrap:wrap;margin:-6px 0 14px;}
+.dash-filters .fs,.dash-filters .fi{width:190px;}
+.dash-tech-card{padding:14px;}
+.dash-tech-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.dash-tech-name{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;}
+.dash-tech-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.dash-tech-eff{font-size:11px;color:var(--muted);margin-top:5px;}
+.dash-chart{padding:14px 16px;display:flex;flex-direction:column;gap:10px;}
+.dash-chart-row{display:flex;flex-direction:column;gap:4px;}
+.dash-chart-top{display:flex;justify-content:space-between;align-items:center;font-size:12px;}
+.dash-chart-top strong{font-size:13px;}
+.dash-bar{height:8px;background:var(--surface2);border:1px solid var(--border);border-radius:999px;overflow:hidden;}
+.dash-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));}
+.dash-chart-meta{font-size:11px;color:var(--muted);}
 
 /* ── SEC LABEL ── */
 .sec{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
@@ -282,6 +296,7 @@ canvas.sig.signed{border-color:var(--green);}
   .add-section-row{gap:6px;}
   .add-section-btn{font-size:11px;padding:6px 10px;}
   .auth-card{padding:16px;}
+  .dash-filters .fs,.dash-filters .fi{width:100%;}
 }
 </style>
 </head>
@@ -388,7 +403,17 @@ canvas.sig.signed{border-color:var(--green);}
       <div class="stat grn"><div class="stat-lbl">Completadas</div><div class="stat-val" id="st-done">0</div><div class="stat-sub">Con reporte</div></div>
       <div class="stat yel"><div class="stat-lbl">Pendientes</div><div class="stat-val" id="st-pend">0</div><div class="stat-sub">Sin iniciar</div></div>
     </div>
-    <div class="sec">Órdenes recientes</div>
+    <div class="dash-filters">
+      <select class="fs" id="dash-tech" onchange="renderDashboard()"></select>
+      <input class="fi" id="dash-from" type="date" onchange="renderDashboard()">
+      <input class="fi" id="dash-to" type="date" onchange="renderDashboard()">
+      <button class="btn btn-ghost btn-sm" onclick="clearDashboardFilters()">Limpiar filtros</button>
+    </div>
+    <div class="sec">Rendimiento por técnico</div>
+    <div class="cards" id="dash-tech-cards"></div>
+    <div class="sec" style="margin-top:14px;">Gráfica de eficiencia</div>
+    <div class="tbl-wrap"><div id="dash-tech-chart" class="dash-chart"></div></div>
+    <div class="sec" style="margin-top:14px;">Órdenes recientes</div>
     <div class="tbl-wrap"><table>
       <thead><tr><th>ID</th><th>Tipo</th><th>Cliente / Sucursal</th><th>Técnico</th><th>Estado</th><th>Fecha</th></tr></thead>
       <tbody id="tb-dash"></tbody>
@@ -696,6 +721,7 @@ var DB = {
 
 var curOrderId=null, chkState={}, sigDraw=false, sigSigned=false;
 var tmpSections=[];
+window.dashboardReportsCache=Array.isArray(window.dashboardReportsCache)?window.dashboardReportsCache:[];
 
 // ══════════════ HELPERS ══════════════
 function uid(){ return '_'+Math.random().toString(36).substr(2,9); }
@@ -711,6 +737,146 @@ function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; 
 function openM(id){ document.getElementById(id).classList.add('on'); }
 function closeM(id){ document.getElementById(id).classList.remove('on'); }
 function confirm_(msg,cb){ document.getElementById('confirm-msg').textContent=msg; document.getElementById('confirm-ok').onclick=function(){ cb(); closeM('m-confirm'); }; openM('m-confirm'); }
+function parseOrderDateToMs(v){
+  if(!v) return Date.now();
+  if(typeof v==='number') return v;
+  if(typeof v.toDate==='function') return v.toDate().getTime();
+  if(typeof v.seconds==='number') return v.seconds*1000;
+  var n=Date.parse(v);
+  if(!isNaN(n)) return n;
+  return Date.now();
+}
+
+function reportMs(item){
+  var f=item&&item.fecha;
+  if(!f) return 0;
+  if(typeof f.toDate==='function') return f.toDate().getTime();
+  if(typeof f.seconds==='number') return f.seconds*1000;
+  var n=Date.parse(f);
+  return isNaN(n)?0:n;
+}
+
+function dayStartMs(v){ if(!v) return 0; var d=new Date(v+'T00:00:00'); return isNaN(d.getTime())?0:d.getTime(); }
+function dayEndMs(v){ if(!v) return 0; var d=new Date(v+'T23:59:59'); return isNaN(d.getTime())?0:d.getTime(); }
+
+function getDashboardReports(){
+  if(Array.isArray(window.dashboardReportsCache) && window.dashboardReportsCache.length){
+    return window.dashboardReportsCache.slice();
+  }
+  return [];
+}
+
+function getDashboardMetricsSnapshot(){
+  var from=(document.getElementById('dash-from')||{}).value||'';
+  var to=(document.getElementById('dash-to')||{}).value||'';
+  var tech=(document.getElementById('dash-tech')||{}).value||'';
+  var fromMs=dayStartMs(from);
+  var toMs=dayEndMs(to);
+  var reports=getDashboardReports().filter(function(r){
+    var ms=reportMs(r);
+    if(fromMs && (!ms || ms<fromMs)) return false;
+    if(toMs && (!ms || ms>toMs)) return false;
+    if(tech && r.tecnicoId!==tech) return false;
+    return true;
+  });
+  var byOrder={};
+  reports.forEach(function(r){ if(r.ordenId) byOrder[r.ordenId]=true; });
+  var doneOrderIds=Object.keys(byOrder);
+  var doneSet={}; doneOrderIds.forEach(function(id){ doneSet[id]=true; });
+
+  var orders=DB.orders.filter(function(o){
+    if(tech && o.techId!==tech) return false;
+    var ms=parseOrderDateToMs(o.createdAt||o.updatedAt||o.date||Date.now());
+    if(fromMs && ms<fromMs) return false;
+    if(toMs && ms>toMs) return false;
+    return true;
+  });
+
+  var total=orders.length;
+  var done=orders.filter(function(o){ return doneSet[o.id] || o.status==='done'; }).length;
+  var progress=orders.filter(function(o){ return o.status==='progress'; }).length;
+  var pending=orders.filter(function(o){ return o.status==='pending'; }).length;
+
+  var techRows=DB.technicians
+    .filter(function(t){
+      if(tech && t.id!==tech) return false;
+      if(t.status && t.status!=='active' && !orders.some(function(o){ return o.techId===t.id; })) return false;
+      return true;
+    })
+    .map(function(t){
+      var tOrders=orders.filter(function(o){ return o.techId===t.id; });
+      var tDone=tOrders.filter(function(o){ return doneSet[o.id] || o.status==='done'; }).length;
+      var eff=tOrders.length?Math.round((tDone/tOrders.length)*100):0;
+      return {id:t.id,name:t.name,orders:tOrders.length,done:tDone,eff:eff,spec:t.spec||''};
+    })
+    .filter(function(r){ return r.orders>0 || !tech; })
+    .sort(function(a,b){ return b.eff-a.eff || b.done-a.done || b.orders-a.orders; });
+
+  return {
+    filters:{from:from,to:to,tech:tech},
+    orders:orders,
+    reports:reports,
+    totals:{total:total,done:done,progress:progress,pending:pending},
+    techRows:techRows
+  };
+}
+
+function renderDashboardFilterOptions(selectedTech){
+  var techSel=document.getElementById('dash-tech');
+  if(!techSel) return;
+  var current=selectedTech||techSel.value||'';
+  var opt='<option value="">— Todos los técnicos —</option>';
+  opt+=DB.technicians
+    .filter(function(t){ return !t.status || t.status==='active'; })
+    .map(function(t){ return '<option value="'+t.id+'">'+t.name+'</option>'; })
+    .join('');
+  techSel.innerHTML=opt;
+  techSel.value=current;
+}
+
+function renderTechKpiCards(rows){
+  var box=document.getElementById('dash-tech-cards');
+  if(!box) return;
+  if(!rows.length){
+    box.innerHTML='<div class="card"><div class="empty"><div class="empty-ico">👷</div>Sin datos por técnico para este filtro</div></div>';
+    return;
+  }
+  box.innerHTML=rows.map(function(r){
+    return '<div class="card dash-tech-card">'
+      +'<div class="dash-tech-head"><div class="dash-tech-name">'+r.name+'</div><span class="chip chip-a">'+r.eff+'% eficiencia</span></div>'
+      +'<div class="dash-tech-meta"><span class="chip">Órdenes: '+r.orders+'</span><span class="chip">Completadas: '+r.done+'</span></div>'
+      +'<div class="dash-bar"><div class="dash-bar-fill" style="width:'+r.eff+'%"></div></div>'
+      +'<div class="dash-tech-eff">'+(r.spec||'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function renderDashChart(rows){
+  var chart=document.getElementById('dash-tech-chart');
+  if(!chart) return;
+  if(!rows.length){
+    chart.innerHTML='<div class="empty"><div class="empty-ico">📈</div>Sin datos para gráfica</div>';
+    return;
+  }
+  var top=rows.slice(0,8);
+  chart.innerHTML=top.map(function(r){
+    return '<div class="dash-chart-row">'
+      +'<div class="dash-chart-top"><strong>'+r.name+'</strong><span>'+r.eff+'%</span></div>'
+      +'<div class="dash-bar"><div class="dash-bar-fill" style="width:'+r.eff+'%"></div></div>'
+      +'<div class="dash-chart-meta">'+r.done+' de '+r.orders+' órdenes completadas</div>'
+      +'</div>';
+  }).join('');
+}
+
+function clearDashboardFilters(){
+  var t=document.getElementById('dash-tech');
+  var f=document.getElementById('dash-from');
+  var to=document.getElementById('dash-to');
+  if(t) t.value='';
+  if(f) f.value='';
+  if(to) to.value='';
+  renderDashboard();
+}
 
 // ══════════════ MOBILE SIDEBAR ══════════════
 function openSidebar(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('sb-backdrop').classList.add('on'); document.body.style.overflow='hidden'; }
@@ -747,15 +913,27 @@ function goTo(page,el){
 
 // ══════════════ DASHBOARD ══════════════
 function renderDashboard(){
-  var total=DB.orders.length, prog=DB.orders.filter(function(o){return o.status==='progress';}).length,
-      done=DB.orders.filter(function(o){return o.status==='done';}).length,
-      pend=DB.orders.filter(function(o){return o.status==='pending';}).length;
-  document.getElementById('st-total').textContent=total;
-  document.getElementById('st-prog').textContent=prog;
-  document.getElementById('st-done').textContent=done;
-  document.getElementById('st-pend').textContent=pend;
-  document.getElementById('nb-pend').textContent=pend;
-  var rows=DB.orders.slice().reverse().slice(0,5).map(function(o){return orderRow(o,false);}).join('');
+  var snap=getDashboardMetricsSnapshot();
+  renderDashboardFilterOptions(snap.filters.tech);
+  document.getElementById('st-total').textContent=snap.totals.total;
+  document.getElementById('st-prog').textContent=snap.totals.progress;
+  document.getElementById('st-done').textContent=snap.totals.done;
+  document.getElementById('st-pend').textContent=snap.totals.pending;
+  document.getElementById('nb-pend').textContent=snap.totals.pending;
+
+  renderTechKpiCards(snap.techRows);
+  renderDashChart(snap.techRows);
+
+  var rows=snap.orders
+    .slice()
+    .sort(function(a,b){
+      var am=parseOrderDateToMs(a.createdAt||a.updatedAt||a.date||Date.now());
+      var bm=parseOrderDateToMs(b.createdAt||b.updatedAt||b.date||Date.now());
+      return bm-am;
+    })
+    .slice(0,5)
+    .map(function(o){return orderRow(o,false);})
+    .join('');
   document.getElementById('tb-dash').innerHTML=rows||'<tr><td colspan="6"><div class="empty">Sin órdenes</div></td></tr>';
 }
 
@@ -795,8 +973,16 @@ function fillBranchSel(){ var cid=document.getElementById('o-client').value; doc
 function saveOrder(){
   var eid=document.getElementById('o-eid').value;
   var data={type:document.getElementById('o-type').value,clientId:document.getElementById('o-client').value,branchId:document.getElementById('o-branch').value,techId:document.getElementById('o-tech').value,clId:document.getElementById('o-cl').value,priority:document.getElementById('o-prio').value,desc:document.getElementById('o-desc').value};
-  if(eid){ for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===eid){Object.assign(DB.orders[i],data);break;} toast('✅ Orden actualizada'); }
-  else{ var num='OT-'+String(DB.nextNum++).padStart(3,'0'); DB.orders.unshift(Object.assign({id:num,status:'pending',date:'Hoy'},data)); toast('✅ Orden '+num+' creada'); }
+  if(eid){
+    for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===eid){ Object.assign(DB.orders[i],data,{updatedAt:new Date().toISOString()}); break; }
+    toast('✅ Orden actualizada');
+  }
+  else{
+    var nowIso=new Date().toISOString();
+    var num='OT-'+String(DB.nextNum++).padStart(3,'0');
+    DB.orders.unshift(Object.assign({id:num,status:'pending',date:'Hoy',createdAt:nowIso,updatedAt:nowIso},data));
+    toast('✅ Orden '+num+' creada');
+  }
   closeM('m-order'); renderOrders(); renderDashboard();
 }
 function delOrder(id){ confirm_('¿Eliminar la orden '+id+'?',function(){ DB.orders=DB.orders.filter(function(o){return o.id!==id;}); renderOrders(); renderDashboard(); toast('🗑️ Orden eliminada'); }); }

@@ -669,6 +669,12 @@ window.loadReportsIntoPanel = async function loadReportsIntoPanel() {
       });
 
     allLoadedReports = docs;
+    window.dashboardReportsCache = docs.map(function (item) {
+      return item.data || {};
+    });
+    if (typeof window.renderDashboard === "function") {
+      window.renderDashboard();
+    }
     renderReportsInPanel(docs);
   } catch (err) {
     console.error("Error cargando reportes:", err);
