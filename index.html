@@ -1959,6 +1959,29 @@ bindPhotoInput();
 initSig();
 renderDashboard();
 </script>
-<script type="module" src="./auth.js"></script>
+<script type="module">
+(async function loadAuthModule(){
+  var candidates=["./auth.js","/auth.js","auth.js"];
+  var loaded=false,lastErr=null;
+  for(var i=0;i<candidates.length;i++){
+    try{
+      await import(candidates[i]);
+      loaded=true;
+      break;
+    }catch(err){
+      lastErr=err;
+      console.warn("No se pudo cargar módulo auth desde:",candidates[i],err);
+    }
+  }
+  if(!loaded){
+    console.error("No fue posible cargar auth.js en ninguna ruta",lastErr);
+    var authMsg=document.getElementById("auth-msg");
+    if(authMsg){
+      authMsg.textContent="No se pudo cargar el módulo de autenticación (auth.js). Verifica la ruta del archivo.";
+      authMsg.className="auth-msg error";
+    }
+  }
+})();
+</script>
 </body>
 </html>
