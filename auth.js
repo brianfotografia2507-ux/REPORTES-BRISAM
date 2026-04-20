@@ -40,6 +40,7 @@ var firebaseAvailable = !!firebaseReady && !!auth && !!db;
 var storageReady = !!storage;
 var firestoreReadApiPromise = null;
 var allLoadedReports = [];
+var selectedReportForPreview = null;
 var reportFilters = {
   tecnico: "",
   from: "",
@@ -428,6 +429,201 @@ function escapeHtml(text) {
     .replace(/'/g, "&#39;");
 }
 
+function compactText(value, max) {
+  var text = String(value || "").trim();
+  if (!text) return "Sin observaciones";
+  if (text.length <= max) return text;
+  return text.slice(0, max) + "...";
+}
+
+function mailToForReport(item) {
+  var data = (item && item.data) || {};
+  var subject = encodeURIComponent(
+    "Reporte " + (data.ordenId || item.id || "sin-folio")
+  );
+  var body = encodeURIComponent(
+    [
+      "Hola,",
+      "",
+      "Comparto el reporte de mantenimiento:",
+      "Folio: " + (data.ordenId || item.id || "—"),
+      "Tecnico: " + (data.tecnicoNombre || "—"),
+      "Fecha: " + formatReportDate(data.fecha),
+      "Progreso: " +
+        (data.respuestas &&
+        data.respuestas.progreso &&
+        typeof data.respuestas.progreso.porcentaje === "number"
+          ? data.respuestas.progreso.porcentaje + "%"
+          : "—"),
+      "",
+      "Observaciones:",
+      data.observaciones || "Sin observaciones",
+      "",
+      "Saludos.",
+    ].join("\n")
+  );
+  return "mailto:?subject=" + subject + "&body=" + body;
+}
+
+function reportProgressLabel(data) {
+  return data &&
+    data.respuestas &&
+    data.respuestas.progreso &&
+    typeof data.respuestas.progreso.porcentaje === "number"
+    ? data.respuestas.progreso.porcentaje + "%"
+    : "—";
+}
+
+function renderReportPreviewPanel(item) {
+  var container = $("rpt-content");
+  if (!container || !item) return;
+
+  var data = item.data || {};
+  var checklist = data.checklist && data.checklist.name ? data.checklist.name : "—";
+  var tecnico = data.tecnicoNombre || "—";
+  var fecha = formatReportDate(data.fecha);
+  var progreso = reportProgressLabel(data);
+  var observaciones = data.observaciones || "Sin observaciones";
+  var fotos = Array.isArray(data.fotos) ? data.fotos.filter(Boolean) : [];
+  var fotoHtml = fotos.length
+    ? fotos
+        .map(function (url) {
+          return (
+            '<img src="' +
+            escapeHtml(url) +
+            '" alt="Foto evidencia" style="width:120px;height:120px;object-fit:cover;border-radius:10px;border:1px solid var(--border);">'
+          );
+        })
+        .join("")
+    : '<div class="empty" style="padding:14px 8px;">Sin evidencia fotográfica</div>';
+
+  var sections = (data.respuestas && data.respuestas.sections) || [];
+  var checklistRows = sections
+    .filter(function (sec) {
+      return sec.type === "checklist";
+    })
+    .map(function (sec) {
+      var rows = (sec.items || [])
+        .map(function (it) {
+          return (
+            '<div class="rchk">' +
+            '<div class="rchk-ic" style="background:' +
+            (it.checked ? "#dcfce7" : "#fee2e2") +
+            ';color:' +
+            (it.checked ? "#166534" : "#991b1b") +
+            ';">' +
+            (it.checked ? "✓" : "✗") +
+            "</div>" +
+            '<span style="flex:1;">' +
+            escapeHtml(it.text || "Actividad") +
+            "</span>" +
+            "</div>"
+          );
+        })
+        .join("");
+      return (
+        '<div class="rst">' +
+        escapeHtml(sec.title || "Checklist") +
+        "</div>" +
+        rows
+      );
+    })
+    .join("");
+
+  var actions =
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
+    '<button class="btn btn-ghost btn-sm" id="rp-back">← Volver a reportes</button>' +
+    '<button class="btn btn-primary btn-sm" id="rp-gen-pdf">⬇ Generar PDF</button>' +
+    '<a class="btn btn-ghost btn-sm" id="rp-mailto" href="' +
+    mailToForReport(item) +
+    '">✉ Enviar por correo</a>' +
+    "</div>";
+
+  container.innerHTML =
+    actions +
+    '<div class="rpt">' +
+    '<div class="rpt-head"><div><div class="rpt-brand">MantenPro</div><div class="rpt-sub">Vista previa de reporte</div></div><div class="rpt-badge">FOLIO ' +
+    escapeHtml(data.ordenId || item.id) +
+    "</div></div>" +
+    '<div class="rdiv"></div>' +
+    '<div class="rgrid">' +
+    '<div class="rf"><div class="rfl">Técnico</div><div class="rfv">' +
+    escapeHtml(tecnico) +
+    "</div></div>" +
+    '<div class="rf"><div class="rfl">Fecha</div><div class="rfv">' +
+    escapeHtml(fecha) +
+    "</div></div>" +
+    '<div class="rf"><div class="rfl">Checklist</div><div class="rfv">' +
+    escapeHtml(checklist) +
+    "</div></div>" +
+    '<div class="rf"><div class="rfl">Progreso</div><div class="rfv">' +
+    escapeHtml(progreso) +
+    "</div></div>" +
+    "</div>" +
+    '<div class="rst">Observaciones</div>' +
+    '<div style="background:#f9fafb;border-radius:8px;padding:10px 12px;font-size:12px;color:#334155;line-height:1.45;">' +
+    escapeHtml(observaciones) +
+    "</div>" +
+    '<div class="rdiv"></div>' +
+    '<div class="rst">Checklist</div>' +
+    (checklistRows ||
+      '<div class="empty" style="padding:12px 0;">Sin items de checklist</div>') +
+    '<div class="rdiv"></div>' +
+    '<div class="rst">Evidencia fotográfica</div>' +
+    '<div class="rphotos" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr));">' +
+    fotoHtml +
+    "</div>" +
+    "</div>";
+
+  var backBtn = $("rp-back");
+  if (backBtn) {
+    backBtn.onclick = function () {
+      selectedReportForPreview = null;
+      renderReportsInPanel(allLoadedReports);
+    };
+  }
+
+  var pdfBtn = $("rp-gen-pdf");
+  if (pdfBtn) {
+    pdfBtn.onclick = function () {
+      if (typeof window.createAndStoreReportPdf !== "function") {
+        window.toast && window.toast("⚠️ Generador PDF no disponible");
+        return;
+      }
+      var pdfData = {
+        ordenId: data.ordenId || item.id,
+        fecha: asMillis(data.fecha) ? new Date(asMillis(data.fecha)) : new Date(),
+        tecnicoNombre: data.tecnicoNombre || "",
+        clienteNombre: data.clienteNombre || "Cliente",
+        sucursalNombre: data.sucursalNombre || "Sucursal",
+        tipoMantenimiento: data.tipoMantenimiento || checklist,
+        descripcionServicio: data.observaciones || "",
+        respuestas: data.respuestas || {},
+        photoPreviews: fotos,
+        signatureData: data.signatureData || "",
+      };
+      try {
+        window.createAndStoreReportPdf(pdfData);
+        if (typeof window.downloadLastReportPdf === "function") {
+          window.downloadLastReportPdf();
+        }
+      } catch (err) {
+        console.error("Error generando PDF desde vista previa:", err);
+        window.toast && window.toast("❌ No se pudo generar el PDF");
+      }
+    };
+  }
+}
+
+window.openReportPreview = function openReportPreview(reportId) {
+  var match = (allLoadedReports || []).find(function (item) {
+    return item.id === reportId;
+  });
+  if (!match) return;
+  selectedReportForPreview = match;
+  renderReportPreviewPanel(match);
+};
+
 function reportDayStart(value) {
   if (!value) return 0;
   var d = new Date(value + "T00:00:00");
@@ -568,7 +764,9 @@ function renderReportsInPanel(reportDocs) {
         : "";
 
       return (
-        '<div class="card">' +
+        '<div class="card" style="cursor:pointer;" data-report-id="' +
+        escapeHtml(item.id) +
+        '">' +
         '<div class="card-head">' +
         '<div style="display:flex;align-items:center;gap:10px;">' +
         '<div class="card-ico" style="background:rgba(59,130,246,.1);">📄</div>' +
@@ -584,7 +782,7 @@ function renderReportsInPanel(reportDocs) {
         "<span>📈 Progreso: " + escapeHtml(progreso) + "</span>" +
         "</div>" +
         '<div style="margin-top:10px;font-size:12px;color:var(--muted2);line-height:1.45;">' +
-        preview +
+        escapeHtml(compactText(observaciones, 180)) +
         "</div>" +
         fotosHtml +
         '<div class="card-meta"><span class="chip">ID: ' +
@@ -597,6 +795,14 @@ function renderReportsInPanel(reportDocs) {
 
   container.innerHTML = filtersHtml + '<div class="cards">' + cards + "</div>";
   wireReportFilterEvents(showAdminFilters);
+  Array.prototype.slice
+    .call(container.querySelectorAll("[data-report-id]"))
+    .forEach(function (el) {
+      el.onclick = function () {
+        var rid = el.getAttribute("data-report-id");
+        if (rid) window.openReportPreview(rid);
+      };
+    });
 }
 
 function wireReportFilterEvents(showAdminFilters) {
