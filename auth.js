@@ -46,6 +46,7 @@ var reportFilters = {
   from: "",
   to: "",
 };
+var geocodeCache = {};
 
 function withTimeout(promise, ms, label) {
   return new Promise(function (resolve, reject) {
@@ -474,6 +475,67 @@ function reportProgressLabel(data) {
     : "—";
 }
 
+function hasReportLocation(data) {
+  return (
+    data &&
+    data.ubicacion &&
+    typeof data.ubicacion.lat === "number" &&
+    typeof data.ubicacion.lng === "number"
+  );
+}
+
+function formatLocationText(data) {
+  if (!hasReportLocation(data)) return "Sin ubicación registrada";
+  return (
+    data.ubicacion.lat.toFixed(5) + ", " + data.ubicacion.lng.toFixed(5)
+  );
+}
+
+function buildMapLink(data) {
+  if (!hasReportLocation(data)) return "";
+  return (
+    "https://www.google.com/maps?q=" +
+    encodeURIComponent(
+      String(data.ubicacion.lat) + "," + String(data.ubicacion.lng)
+    )
+  );
+}
+
+function geocodeAddressLabel(data) {
+  if (!hasReportLocation(data)) return Promise.resolve("");
+  var key =
+    String(data.ubicacion.lat.toFixed(5)) + "," + String(data.ubicacion.lng.toFixed(5));
+  if (geocodeCache[key]) return Promise.resolve(geocodeCache[key]);
+  var url =
+    "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=" +
+    encodeURIComponent(String(data.ubicacion.lat)) +
+    "&lon=" +
+    encodeURIComponent(String(data.ubicacion.lng));
+  return fetch(url, {
+    headers: { Accept: "application/json" },
+  })
+    .then(function (r) {
+      if (!r.ok) throw new Error("geocode failed");
+      return r.json();
+    })
+    .then(function (json) {
+      var label =
+        (json && (json.display_name || (json.address && json.address.road))) ||
+        "";
+      geocodeCache[key] = label || "";
+      return geocodeCache[key];
+    })
+    .catch(function () {
+      return "";
+    });
+}
+
+function maybeRenderDashboardWithAddress() {
+  if (typeof window.renderDashboard === "function") {
+    window.renderDashboard();
+  }
+}
+
 function renderReportPreviewPanel(item) {
   var container = $("rpt-content");
   if (!container || !item) return;
@@ -485,6 +547,12 @@ function renderReportPreviewPanel(item) {
   var progreso = reportProgressLabel(data);
   var observaciones = data.observaciones || "Sin observaciones";
   var fotos = Array.isArray(data.fotos) ? data.fotos.filter(Boolean) : [];
+  var locationText = formatLocationText(data);
+  var mapUrl = buildMapLink(data);
+  var approxAddress =
+    data.ubicacion && data.ubicacion.direccionAprox
+      ? data.ubicacion.direccionAprox
+      : "";
   var fotoHtml = fotos.length
     ? fotos
         .map(function (url) {
@@ -558,6 +626,17 @@ function renderReportPreviewPanel(item) {
     "</div></div>" +
     '<div class="rf"><div class="rfl">Progreso</div><div class="rfv">' +
     escapeHtml(progreso) +
+    "</div></div>" +
+    '<div class="rf"><div class="rfl">Ubicación GPS</div><div class="rfv">' +
+    escapeHtml(locationText) +
+    (mapUrl
+      ? ' · <a href="' +
+        escapeHtml(mapUrl) +
+        '" target="_blank" rel="noopener">Ver mapa</a>'
+      : "") +
+    "</div></div>" +
+    '<div class="rf"><div class="rfl">Dirección aproximada</div><div class="rfv">' +
+    escapeHtml(approxAddress || "No disponible") +
     "</div></div>" +
     "</div>" +
     '<div class="rst">Observaciones</div>' +
@@ -748,6 +827,9 @@ function renderReportsInPanel(reportDocs) {
         typeof data.respuestas.progreso.porcentaje === "number"
           ? data.respuestas.progreso.porcentaje + "%"
           : "—";
+      var locationMeta = hasReportLocation(data)
+        ? "📍 " + formatLocationText(data)
+        : "📍 Sin ubicación";
       var fotos = Array.isArray(data.fotos) ? data.fotos.filter(Boolean).slice(0, 3) : [];
       var fotosHtml = fotos.length
         ? '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">' +
@@ -780,6 +862,7 @@ function renderReportsInPanel(reportDocs) {
         "<span>👷 " + escapeHtml(tecnico) + "</span>" +
         "<span>📅 " + escapeHtml(fecha) + "</span>" +
         "<span>📈 Progreso: " + escapeHtml(progreso) + "</span>" +
+        "<span>" + escapeHtml(locationMeta) + "</span>" +
         "</div>" +
         '<div style="margin-top:10px;font-size:12px;color:var(--muted2);line-height:1.45;">' +
         escapeHtml(compactText(observaciones, 180)) +
@@ -875,6 +958,32 @@ window.loadReportsIntoPanel = async function loadReportsIntoPanel() {
       });
 
     allLoadedReports = docs;
+    docs.forEach(function (item) {
+      if (
+        item &&
+        item.data &&
+        item.data.ubicacion &&
+        !item.data.ubicacion.direccionAprox &&
+        hasReportLocation(item.data)
+      ) {
+        geocodeAddressLabel(item.data).then(function (label) {
+          if (label) {
+            item.data.ubicacion.direccionAprox = label;
+            window.dashboardReportsCache = docs.map(function (dItem) {
+              return dItem.data || {};
+            });
+            maybeRenderDashboardWithAddress();
+            if (
+              selectedReportForPreview &&
+              selectedReportForPreview.id === item.id
+            ) {
+              renderReportPreviewPanel(item);
+            }
+            renderReportsInPanel(allLoadedReports);
+          }
+        });
+      }
+    });
     window.dashboardReportsCache = docs.map(function (item) {
       return item.data || {};
     });

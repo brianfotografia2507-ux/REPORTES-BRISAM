@@ -1325,6 +1325,85 @@ function withTimeout(promise,ms,label){
   });
 }
 
+function geoErrorLabel(err){
+  if(!err || typeof err.code!=='number') return 'No se pudo obtener la ubicación.';
+  if(err.code===1) return 'Permiso de ubicación denegado.';
+  if(err.code===2) return 'No se pudo determinar la ubicación.';
+  if(err.code===3) return 'Tiempo de espera agotado al obtener ubicación.';
+  return 'Error de ubicación.';
+}
+
+function getCurrentPositionOnce(options){
+  return new Promise(function(resolve,reject){
+    if(!navigator.geolocation){ reject(new Error('Geolocalización no soportada')); return; }
+    navigator.geolocation.getCurrentPosition(resolve,reject,options||{});
+  });
+}
+
+async function reverseGeocodeCoords(lat,lng){
+  try{
+    var url='https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=es&lat='+encodeURIComponent(String(lat))+'&lon='+encodeURIComponent(String(lng));
+    var res=await withTimeout(fetch(url,{method:'GET'}),7000,'Geocoding');
+    if(!res || !res.ok) return '';
+    var data=await res.json();
+    return data && data.display_name ? String(data.display_name) : '';
+  }catch(_err){
+    return '';
+  }
+}
+
+async function getTabletLocationForReport(){
+  if(!navigator.geolocation){
+    toast('⚠️ Este dispositivo no soporta geolocalización');
+    return null;
+  }
+
+  try{
+    if(navigator.permissions && navigator.permissions.query){
+      var perm=await navigator.permissions.query({name:'geolocation'});
+      if(perm && perm.state==='denied'){
+        toast('⚠️ Activa permisos de ubicación para registrar el servicio');
+        return null;
+      }
+    }
+  }catch(_permErr){}
+
+  var attempts=[
+    {enableHighAccuracy:true,timeout:12000,maximumAge:0},
+    {enableHighAccuracy:true,timeout:20000,maximumAge:30000}
+  ];
+  var lastError=null;
+  toast('📍 Obteniendo ubicación GPS...');
+
+  for(var i=0;i<attempts.length;i++){
+    try{
+      var pos=await getCurrentPositionOnce(attempts[i]);
+      var lat=Number((pos.coords.latitude||0).toFixed(6));
+      var lng=Number((pos.coords.longitude||0).toFixed(6));
+      var accuracy=Math.round(pos.coords.accuracy||0);
+      var address=await reverseGeocodeCoords(lat,lng);
+      if(accuracy>120){
+        toast('📍 Ubicación aproximada detectada ('+accuracy+'m)');
+      }else{
+        toast('📍 Ubicación capturada');
+      }
+      return {
+        lat:lat,
+        lng:lng,
+        accuracy:accuracy,
+        address:address||'',
+        capturedAt:new Date().toISOString()
+      };
+    }catch(err){
+      lastError=err;
+      console.warn('Intento de geolocalización fallido:',i+1,err);
+    }
+  }
+
+  toast('⚠️ '+geoErrorLabel(lastError));
+  return null;
+}
+
 function getJsPdfCtor(){
   if(window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
   if(typeof window.jsPDF==='function') return window.jsPDF;
@@ -1835,6 +1914,11 @@ async function closeOrder(){
 
   var ck=gCl(o.clId),tc=gTech(o.techId),cl=gClient(o.clientId),br=gBranch(o.branchId),captured=collectChecklistReportData(o,total,done);
   try{
+    var locationData=await getTabletLocationForReport();
+    if(!locationData || typeof locationData.lat!=='number' || typeof locationData.lng!=='number'){
+      throw new Error('No se pudo capturar ubicación GPS');
+    }
+
     var imagenes=pendingPhotos
       .map(function(p,idx){ return p && p.file ? {slotIndex:idx,file:p.file} : null; })
       .filter(function(p){ return !!p; });
@@ -1858,7 +1942,15 @@ async function closeOrder(){
       checklist:{id:o.clId,name:ck?ck.name:'—'},
       respuestas:captured.respuestas,
       observaciones:captured.observaciones||o.desc||'',
-      fotos:urls
+      fotos:urls,
+      ubicacion:{
+        lat:locationData.lat,
+        lng:locationData.lng,
+        accuracy:locationData.accuracy||0,
+        direccionAprox:locationData.address||'',
+        capturedAt:locationData.capturedAt||new Date().toISOString(),
+        source:'navigator.geolocation'
+      }
     };
 
     console.log('[closeOrder] Antes de guardar reporte');
@@ -1893,22 +1985,30 @@ async function closeOrder(){
 
     o.status='done';
     document.getElementById('wd-wrap').style.display='none';
-    buildReport(o);
+    buildReport(o,locationData);
     goTo('report',document.getElementById('ni-report'));
     renderTechView(); renderDashboard();
     toast('✅ Reporte generado y guardado');
-  }catch(err){
-    console.error('Error en cierre de orden:',err);
-    toast('❌ No se pudo cerrar la orden. Revisa la subida de imágenes e intenta nuevamente.');
+    }catch(err){
+      console.error('Error en cierre de orden:',err);
+      var emsg=String((err&&err.message)||'');
+      if(emsg.indexOf('ubicación GPS')!==-1){
+        toast('⚠️ Activa la ubicación exacta para cerrar la orden');
+      }else{
+        toast('❌ No se pudo cerrar la orden. Revisa la subida de imágenes e intenta nuevamente.');
+      }
   }finally{
     closingOrderInProgress=false;
     if(closeBtn){ closeBtn.disabled=false; closeBtn.style.opacity=''; closeBtn.textContent='✓ Cerrar Orden y Generar Reporte'; }
   }
 }
 
-function buildReport(o){
+function buildReport(o,locationData){
   var cl=gClient(o.clientId),br=gBranch(o.branchId),tc=gTech(o.techId),ck=gCl(o.clId);
   var now=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  var locLabel=(locationData && typeof locationData.lat==='number' && typeof locationData.lng==='number')
+    ? (locationData.lat.toFixed(5)+', '+locationData.lng.toFixed(5)+(locationData.accuracy?(' ('+locationData.accuracy+'m)'):''))
+    : 'Sin ubicación';
 
   // Build dynamic sections for report
   var dynReport='';
@@ -1959,6 +2059,7 @@ function buildReport(o){
     +'<div class="rf"><div class="rfl">Sucursal</div><div class="rfv">'+(br?br.name:'—')+'</div></div>'
     +'<div class="rf"><div class="rfl">Técnico</div><div class="rfv">'+(tc?tc.name:'—')+'</div></div>'
     +'<div class="rf"><div class="rfl">Fecha</div><div class="rfv">'+now+'</div></div>'
+    +'<div class="rf"><div class="rfl">Ubicación GPS</div><div class="rfv">'+locLabel+'</div></div>'
     +'</div>'
     +dynReport
     +'<div class="rdiv"></div>'
