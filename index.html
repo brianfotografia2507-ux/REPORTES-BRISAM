@@ -1961,12 +1961,37 @@ renderDashboard();
 </script>
 <script type="module">
 (async function loadAuthModule(){
-  var candidates=["./auth.js","/auth.js","auth.js"];
+  window.__authModuleReady=false;
+  function bindAuthSubmitGuards(){
+    ["login-form","register-form"].forEach(function(id){
+      var form=document.getElementById(id);
+      if(!form || form.__guardBound) return;
+      form.__guardBound=true;
+      form.addEventListener("submit",function(ev){
+        if(window.__authModuleReady) return;
+        ev.preventDefault();
+        var authMsg=document.getElementById("auth-msg");
+        if(authMsg){
+          authMsg.textContent="Cargando módulo de autenticación... verifica que index y auth.js estén en la misma carpeta.";
+          authMsg.className="auth-msg error";
+        }
+      });
+    });
+  }
+  bindAuthSubmitGuards();
+
+  var candidates=[
+    "./auth.js",
+    "/auth.js",
+    "auth.js",
+    "https://cdn.jsdelivr.net/gh/brianfotografia2507-ux/REPORTES-BRISAM@main/auth.js"
+  ];
   var loaded=false,lastErr=null;
   for(var i=0;i<candidates.length;i++){
     try{
       await import(candidates[i]);
       loaded=true;
+      window.__authModuleReady=true;
       break;
     }catch(err){
       lastErr=err;
