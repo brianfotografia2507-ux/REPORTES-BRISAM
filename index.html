@@ -256,6 +256,10 @@ canvas.sig.signed{border-color:var(--green);}
 .cl-section-title-input{flex:1;background:transparent;border:none;outline:none;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text);}
 .cl-section-title-input::placeholder{color:var(--muted);}
 .cl-section-body{padding:10px 14px;}
+.cl-move-wrap{display:flex;gap:4px;margin-left:auto;}
+.cl-move-btn{width:26px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface3);color:var(--muted2);cursor:pointer;font-size:12px;line-height:1;}
+.cl-move-btn:hover{border-color:var(--accent);color:var(--accent);}
+.cl-move-btn:disabled{opacity:.35;cursor:not-allowed;}
 
 /* Items within section */
 .cl-sec-items{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
@@ -1123,6 +1127,10 @@ function renderBuilder(){
       +'<div class="cl-section-head">'
       +'<span class="sec-type-badge">'+(icons[sec.type]||sec.type)+'</span>'
       +'<input class="cl-section-title-input" value="'+sec.title+'" placeholder="Nombre de la sección..." oninput="tmpSections['+si+'].title=this.value">'
+      +'<div class="cl-move-wrap">'
+      +'<button class="cl-move-btn" title="Mover arriba" onclick="moveSection('+si+',-1)" '+(si===0?'disabled':'')+'>↑</button>'
+      +'<button class="cl-move-btn" title="Mover abajo" onclick="moveSection('+si+',1)" '+(si===tmpSections.length-1?'disabled':'')+'>↓</button>'
+      +'</div>'
       +'<button class="cl-del-btn" style="font-size:16px;" onclick="removeSection('+si+')">🗑️</button>'
       +'</div>'
       +'<div class="cl-section-body">'+bodyHtml+'</div>'
@@ -1144,6 +1152,14 @@ function addSection(type){
 }
 
 function removeSection(si){ tmpSections.splice(si,1); renderBuilder(); }
+function moveSection(si,dir){
+  var ni=si+dir;
+  if(ni<0 || ni>=tmpSections.length) return;
+  var cur=tmpSections[si];
+  tmpSections[si]=tmpSections[ni];
+  tmpSections[ni]=cur;
+  renderBuilder();
+}
 
 function addSecItem(si){
   var txt=document.getElementById('new-item-'+si).value.trim();
