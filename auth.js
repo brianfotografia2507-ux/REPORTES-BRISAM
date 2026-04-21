@@ -1026,26 +1026,6 @@ async function syncRuntimeCollectionsForUser(user, profile) {
   }
 }
 
-function getUniqueChecklistNames(reportDocs) {
-  var names = {};
-  (reportDocs || []).forEach(function (item) {
-    var data = (item && item.data) || {};
-    var label = data.checklistNombre || (data.checklist && data.checklist.name) || "";
-    if (label) names[label] = true;
-  });
-  return Object.keys(names).sort();
-}
-
-function getUniqueBranchNames(reportDocs) {
-  var names = {};
-  (reportDocs || []).forEach(function (item) {
-    var data = (item && item.data) || {};
-    var label = data.sucursalNombre || "";
-    if (label) names[label] = true;
-  });
-  return Object.keys(names).sort();
-}
-
 function renderReportsInPanel(reportDocs) {
   var container = $("rpt-content");
   if (!container) return;

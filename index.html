@@ -2250,12 +2250,7 @@ renderDashboard();
   }
   bindAuthSubmitGuards();
 
-  var candidates=[
-    "./auth.js",
-    "/auth.js",
-    "auth.js",
-    "https://cdn.jsdelivr.net/gh/brianfotografia2507-ux/REPORTES-BRISAM@main/auth.js"
-  ];
+  var candidates=["./auth.js","/auth.js"];
   var loaded=false,lastErr=null;
   for(var i=0;i<candidates.length;i++){
     try{
