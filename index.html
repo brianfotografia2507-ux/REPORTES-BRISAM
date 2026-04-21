@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MantenPro</title>
+<title>BRISAM</title>
 <link rel="icon" type="image/png" href="./assets/favicon.png">
 <link rel="apple-touch-icon" href="./assets/favicon.png">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
@@ -373,7 +373,8 @@ canvas.sig.signed{border-color:var(--green);}
     <div class="s-section">Principal</div>
     <button class="s-item on"  id="ni-dashboard"   data-role="administrador" onclick="goTo('dashboard',this)"><span class="ico">📊</span>Dashboard</button>
     <button class="s-item"     id="ni-orders"      data-role="administrador" onclick="goTo('orders',this)"><span class="ico">📋</span>Órdenes<span class="s-badge" id="nb-pend">0</span></button>
-    <button class="s-item"     id="ni-tech"        data-role="tecnico" onclick="goTo('tech',this)"><span class="ico">🔧</span>Vista Técnico</button>
+    <button class="s-item"     id="ni-tech"        data-role="tecnico" onclick="openTechOrdersSection(this)"><span class="ico">🔧</span>Vista Técnico</button>
+    <button class="s-item"     id="ni-tech-checklists" data-role="tecnico" onclick="openTechChecklistSection(this)"><span class="ico">🧾</span>Checklist</button>
     <button class="s-item"     id="ni-report"      data-role="tecnico,administrador" onclick="goTo('report',this)"><span class="ico">📄</span>Reportes</button>
     <div class="s-section">Catálogos</div>
     <button class="s-item"     id="ni-clients"      data-role="administrador" onclick="goTo('clients',this)"><span class="ico">🏢</span>Clientes</button>
@@ -442,11 +443,11 @@ canvas.sig.signed{border-color:var(--green);}
       <div class="av" id="tv-av" style="width:44px;height:44px;border-radius:12px;font-size:16px;background:linear-gradient(135deg,var(--accent),#c2410c);">JR</div>
       <div style="flex:1;">
         <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;" id="tv-name">—</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;"></span>Técnico de campo · En línea</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="tv-subline"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;"></span>Técnico de campo · En línea</div>
+        <div style="font-size:11px;color:var(--muted2);margin-top:2px;" id="tv-email">—</div>
       </div>
-      <select class="fs" style="width:auto;" id="tv-sel" onchange="switchTech(this.value)"></select>
     </div>
-    <div class="sec">Órdenes pendientes</div>
+    <div class="sec" id="tv-main-title">Órdenes asignadas</div>
     <div id="tv-list"></div>
     <div id="wd-wrap" style="display:none;margin-top:20px;">
       <div class="wo-wrap">
@@ -456,6 +457,18 @@ canvas.sig.signed{border-color:var(--green);}
           <div class="wo-loc">📍 <span id="wd-loc"></span></div>
         </div>
         <div class="wo-body">
+          <div id="wd-free-meta" style="display:none;margin-bottom:12px;">
+            <div class="frow">
+              <div class="fg">
+                <label class="fl">Cliente (opcional)</label>
+                <input class="fi" id="wd-free-client" type="text" placeholder="Ej: Cliente libre">
+              </div>
+              <div class="fg">
+                <label class="fl">Sucursal (opcional)</label>
+                <input class="fi" id="wd-free-branch" type="text" placeholder="Ej: Sucursal libre">
+              </div>
+            </div>
+          </div>
           <div class="prog-wrap">
             <div class="prog-labels"><span>Progreso check-list</span><span id="wd-pct">0%</span></div>
             <div class="prog-bar"><div class="prog-fill" id="wd-fill" style="width:0%"></div></div>
@@ -477,7 +490,7 @@ canvas.sig.signed{border-color:var(--green);}
           </div>
         </div>
       </div>
-      <button class="btn btn-success" style="width:100%;justify-content:center;padding:13px;font-size:14px;" onclick="closeOrder()">✓ Cerrar Orden y Generar Reporte</button>
+      <button class="btn btn-success" id="wd-close-btn" style="width:100%;justify-content:center;padding:13px;font-size:14px;" onclick="closeOrder()">✓ Cerrar Orden y Generar Reporte</button>
     </div>
   </div>
 
@@ -651,83 +664,18 @@ canvas.sig.signed{border-color:var(--green);}
 <script>
 // ══════════════ DATA ══════════════
 var DB = {
-  clients:[
-    {id:'cl1',name:'El Pollo Loco',contact:'Rodrigo Sánchez',phone:'+52 81 1234 5678',email:'rsanchez@elpolloloco.mx',notes:'Contrato anual. 8 sucursales activas.'},
-    {id:'cl2',name:'El Club de Pollos',contact:'María González',phone:'+52 81 8765 4321',email:'mgonzalez@clubpollos.mx',notes:'1 sucursal. Contrato mensual.'}
-  ],
-  branches:[
-    {id:'br1',clientId:'cl1',name:'Sucursal Cumbres',address:'Av. Cumbres 4to Sector, MTY',contact:'Pedro López',phone:'+52 81 2222 1111',status:'active'},
-    {id:'br2',clientId:'cl1',name:'Sucursal Valle',address:'Blvd. Valle Sur 200, MTY',contact:'Ana Torres',phone:'+52 81 3333 2222',status:'active'},
-    {id:'br3',clientId:'cl1',name:'Sucursal San Pedro',address:'Calzada del Valle 300, SPG',contact:'Carlos Ruiz',phone:'+52 81 4444 3333',status:'active'},
-    {id:'br4',clientId:'cl1',name:'Sucursal Apodaca',address:'Av. Sendero 500, Apodaca',contact:'Luis Mtz',phone:'+52 81 5555 4444',status:'active'},
-    {id:'br5',clientId:'cl2',name:'Sucursal Principal',address:'Av. Constitución 100, MTY',contact:'Jorge Reyes',phone:'+52 81 6666 5555',status:'active'}
-  ],
-  technicians:[
-    {id:'tc1',name:'Juan Rodríguez',spec:'Refrigeración y A/C',phone:'+52 81 1111 2222',status:'active',notes:'Certificado ASHRAE'},
-    {id:'tc2',name:'Carlos Méndez',spec:'Eléctrico general',phone:'+52 81 2222 3333',status:'active',notes:''},
-    {id:'tc3',name:'Luis Torres',spec:'Plomería y cocina',phone:'+52 81 3333 4444',status:'active',notes:''}
-  ],
-  equipment:[
-    {id:'eq1',branchId:'br1',name:'Compresor #1',type:'Refrigeración',brand:'Copeland',model:'ZR61KC',year:'2021',status:'active',notes:''},
-    {id:'eq2',branchId:'br1',name:'A/C Zona Comedor',type:'Aire Acondicionado',brand:'Carrier',model:'38GXC',year:'2020',status:'active',notes:''},
-    {id:'eq3',branchId:'br2',name:'Cámara Fría',type:'Refrigeración',brand:'Heatcraft',model:'LCU060',year:'2019',status:'active',notes:'Revisar sellos'},
-    {id:'eq4',branchId:'br3',name:'Tablero Eléctrico',type:'Eléctrico',brand:'Siemens',model:'QP220',year:'2022',status:'active',notes:''}
-  ],
-  checklists:[
-    {id:'ck1',name:'Preventivo Refrigeración',type:'Mantenimiento Preventivo',sections:[
-      {id:'s1',type:'fields',title:'Datos de la visita',fields:[
-        {id:'f1',label:'Gerente en turno',inputType:'text'},
-        {id:'f2',label:'Hora de inicio',inputType:'time'},
-        {id:'f3',label:'Hora de cierre',inputType:'time'}
-      ]},
-      {id:'s2',type:'checklist',title:'Actividades de mantenimiento',items:[
-        {id:'i1',text:'Revisión de compresor',cat:'Refrigeración'},
-        {id:'i2',text:'Verificar niveles de refrigerante',cat:'Refrigeración'},
-        {id:'i3',text:'Limpieza de condensador',cat:'Refrigeración'},
-        {id:'i4',text:'Revisión de sellos y empaques',cat:'Refrigeración'},
-        {id:'i5',text:'Prueba de temperatura',cat:'Refrigeración'},
-        {id:'i6',text:'Lubricación de partes móviles',cat:'General'}
-      ]},
-      {id:'s3',type:'textarea',title:'Observaciones generales',placeholder:'Escribe cualquier observación relevante...'}
-    ]},
-    {id:'ck2',name:'Preventivo A/C',type:'Mantenimiento Preventivo',sections:[
-      {id:'s1',type:'fields',title:'Datos de la visita',fields:[
-        {id:'f1',label:'Gerente en turno',inputType:'text'},
-        {id:'f2',label:'Temperatura ambiente (°C)',inputType:'number'}
-      ]},
-      {id:'s2',type:'checklist',title:'Actividades A/C',items:[
-        {id:'i1',text:'Limpieza de filtros',cat:'A/C'},
-        {id:'i2',text:'Revisión de compresor',cat:'A/C'},
-        {id:'i3',text:'Verificar carga de refrigerante',cat:'A/C'},
-        {id:'i4',text:'Limpiar serpentín evaporador',cat:'A/C'},
-        {id:'i5',text:'Revisar drenaje de condensado',cat:'A/C'},
-        {id:'i6',text:'Medir amperaje del motor',cat:'Eléctrico'}
-      ]},
-      {id:'s3',type:'textarea',title:'Recomendaciones',placeholder:'Recomendaciones para próxima visita...'}
-    ]},
-    {id:'ck3',name:'Inspección General',type:'Inspección',sections:[
-      {id:'s1',type:'fields',title:'Información de visita',fields:[
-        {id:'f1',label:'Gerente en turno',inputType:'text'},
-        {id:'f2',label:'No. de visita del mes',inputType:'number'}
-      ]},
-      {id:'s2',type:'checklist',title:'Puntos de inspección',items:[
-        {id:'i1',text:'Revisar instalación eléctrica',cat:'Eléctrico'},
-        {id:'i2',text:'Inspección visual de equipos',cat:'General'},
-        {id:'i3',text:'Verificar sistemas de gas',cat:'Cocina'},
-        {id:'i4',text:'Revisar plomería',cat:'Plomería'}
-      ]},
-      {id:'s3',type:'textarea',title:'Comentarios del técnico',placeholder:'Comentarios adicionales...'}
-    ]}
-  ],
-  orders:[
-    {id:'OT-001',type:'Mantenimiento Preventivo',clientId:'cl1',branchId:'br1',techId:'tc1',clId:'ck1',priority:'Normal',desc:'Mantenimiento mensual',status:'pending',date:'Hoy 09:00'},
-    {id:'OT-002',type:'Mantenimiento Correctivo',clientId:'cl1',branchId:'br2',techId:'tc2',clId:'ck3',priority:'Alta',desc:'Falla en cámara fría',status:'progress',date:'Hoy 10:30'},
-    {id:'OT-003',type:'Preventivo A/C',clientId:'cl2',branchId:'br5',techId:'tc1',clId:'ck2',priority:'Normal',desc:'',status:'done',date:'Ayer 14:00'}
-  ],
-  nextNum:4
+  clients:[],
+  branches:[],
+  technicians:[],
+  equipment:[],
+  checklists:[],
+  orders:[],
+  nextNum:1
 };
 
 var curOrderId=null, chkState={}, sigDraw=false, sigSigned=false;
+var currentWorkMode='order';
+var currentFreeChecklistId='';
 var tmpSections=[];
 window.dashboardReportsCache=Array.isArray(window.dashboardReportsCache)?window.dashboardReportsCache:[];
 
@@ -1197,39 +1145,197 @@ function saveCl(){
 function delCl(id){ confirm_('¿Eliminar este check-list?',function(){ DB.checklists=DB.checklists.filter(function(c){return c.id!==id;}); renderChecklists(); toast('🗑️ Check-list eliminado'); }); }
 
 // ══════════════ TECH VIEW ══════════════
-function renderTechView(){
-  var sel=document.getElementById('tv-sel'),prev=sel.value;
-  sel.innerHTML=DB.technicians.filter(function(t){return t.status==='active';}).map(function(t){return'<option value="'+t.id+'">'+t.name+'</option>';}).join('');
-  var found=false; for(var i=0;i<DB.technicians.length;i++) if(DB.technicians[i].id===prev){found=true;break;}
-  if(found) sel.value=prev;
-  switchTech(sel.value);
+var ACTIVE_TECH_SECTION='orders';
+var TECH_CONTEXT={
+  uid:'',
+  name:'',
+  email:'',
+  role:'tecnico',
+  spec:'',
+  online:true
+};
+
+function techStatusText(profile){
+  var spec=(profile&&profile.spec)?String(profile.spec):'Técnico de campo';
+  var roleLabel=(profile&&profile.role==='administrador')?'Administrador':spec;
+  var onlineLabel=(profile&&profile.online===false)?'Desconectado':'En línea';
+  return roleLabel+' · '+onlineLabel;
 }
 
-function switchTech(tid){
-  var t=gTech(tid);if(!t)return;
-  document.getElementById('tv-av').textContent=initials(t.name);
-  document.getElementById('tv-av').style.background='linear-gradient(135deg,'+techColor(tid)+',#c2410c)';
-  document.getElementById('tv-name').textContent=t.name;
-  var myOrders=DB.orders.filter(function(o){return o.techId===tid&&o.status!=='done';});
+function setAuthenticatedTechProfile(profile){
+  TECH_CONTEXT=Object.assign({
+    uid:'',
+    name:'',
+    email:'',
+    role:'tecnico',
+    spec:'',
+    online:true
+  },profile||{});
+  var name=TECH_CONTEXT.name||TECH_CONTEXT.email||'Técnico';
+  document.getElementById('tv-name').textContent=name;
+  document.getElementById('tv-email').textContent=TECH_CONTEXT.email||'';
+  document.getElementById('tv-av').textContent=initials(name);
+  document.getElementById('tv-subline').innerHTML='<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;"></span>'+techStatusText(TECH_CONTEXT);
+}
+
+function setFirestoreRuntimeData(payload){
+  if(!payload || typeof payload!=='object') return;
+  if(Array.isArray(payload.orders)) DB.orders=payload.orders.slice();
+  if(Array.isArray(payload.checklists)) DB.checklists=payload.checklists.slice();
+  if(Array.isArray(payload.technicians)) DB.technicians=payload.technicians.slice();
+  if(Array.isArray(payload.clients)) DB.clients=payload.clients.slice();
+  if(Array.isArray(payload.branches)) DB.branches=payload.branches.slice();
+  if(Array.isArray(payload.equipment)) DB.equipment=payload.equipment.slice();
+  renderDashboard();
+  renderTechs();
+  renderChecklists();
+  if(ACTIVE_TECH_SECTION==='checklists') renderTechChecklistList();
+  else renderTechOrdersSection();
+}
+window.setAuthenticatedTechProfile=setAuthenticatedTechProfile;
+window.setFirestoreRuntimeData=setFirestoreRuntimeData;
+
+function renderTechView(){
+  if(ACTIVE_TECH_SECTION==='checklists'){
+    renderTechChecklistList();
+  }else{
+    renderTechOrdersSection();
+  }
+}
+
+function openTechOrdersSection(el){
+  ACTIVE_TECH_SECTION='orders';
+  goTo('tech',el||document.getElementById('ni-tech'));
+}
+
+function openTechChecklistSection(el){
+  ACTIVE_TECH_SECTION='checklists';
+  goTo('tech',el||document.getElementById('ni-tech-checklists'));
+}
+
+function renderTechOrdersSection(){
+  document.getElementById('tv-main-title').textContent='Órdenes asignadas';
+  currentWorkMode='order';
+  currentFreeChecklistId='';
+  setWorkModeButtonLabel();
+  var uid=TECH_CONTEXT.uid||'';
+  var techId=TECH_CONTEXT.techId||uid;
+  var myOrders=DB.orders.filter(function(o){
+    if(!o) return false;
+    if(o.status==='done') return false;
+    return (uid && (o.techUid===uid || o.uid===uid)) || (techId && o.techId===techId);
+  });
   var html=myOrders.map(function(o){
     var cl=gClient(o.clientId),br=gBranch(o.branchId),lbl=o.status==='pending'?'Pendiente':'En Progreso',cls=o.status==='pending'?'b-pend':'b-prog';
     return'<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:border-color .15s;" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'" onclick="openWork(\''+o.id+'\')">'
       +'<div style="font-family:\'Syne\',sans-serif;font-size:11px;color:var(--accent);font-weight:700;min-width:52px;">'+o.id+'</div>'
-      +'<div style="flex:1;"><div style="font-weight:500;font-size:14px;">'+o.type+'</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">'+(cl?cl.name:'—')+' · '+(br?br.name:'—')+'</div></div>'
+      +'<div style="flex:1;"><div style="font-weight:500;font-size:14px;">'+(o.type||'Orden de trabajo')+'</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">'+(cl?cl.name:'—')+' · '+(br?br.name:'—')+'</div></div>'
       +'<span class="badge '+cls+'">'+lbl+'</span></div>';
   }).join('');
-  document.getElementById('tv-list').innerHTML=html||'<div class="empty"><div class="empty-ico">🎉</div>Sin órdenes pendientes</div>';
+  document.getElementById('tv-list').innerHTML=html||'<div class="empty"><div class="empty-ico">🎉</div>Sin órdenes asignadas</div>';
   document.getElementById('wd-wrap').style.display='none';
+}
+
+function renderTechChecklistList(){
+  document.getElementById('tv-main-title').textContent='Checklist disponibles';
+  document.getElementById('wd-wrap').style.display='none';
+  var html=DB.checklists.map(function(cl){
+    var totalItems=0;
+    (cl.sections||[]).forEach(function(sec){
+      if(sec.type==='checklist' && Array.isArray(sec.items)) totalItems+=sec.items.length;
+    });
+    return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;">'
+      +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
+      +'<div><div style="font-weight:600;font-size:14px;">'+cl.name+'</div>'
+      +'<div style="font-size:12px;color:var(--muted);margin-top:4px;">'+(cl.type||'General')+' · '+totalItems+' tareas</div></div>'
+      +'<button class="btn btn-primary btn-sm" onclick="openFreeChecklist(\''+cl.id+'\')">Iniciar</button>'
+      +'</div></div>';
+  }).join('');
+  document.getElementById('tv-list').innerHTML=html||'<div class="empty"><div class="empty-ico">🧾</div>No hay checklist activos disponibles</div>';
+}
+
+function setWorkModeButtonLabel(){
+  var closeBtn=document.getElementById('wd-close-btn');
+  if(!closeBtn) return;
+  if(currentWorkMode==='free'){
+    closeBtn.textContent='✓ Guardar Checklist Libre';
+  }else{
+    closeBtn.textContent='✓ Cerrar Orden y Generar Reporte';
+  }
+}
+
+function openFreeChecklist(checklistId){
+  var ck=gCl(checklistId);
+  if(!ck){
+    toast('⚠️ Checklist no disponible');
+    return;
+  }
+  currentWorkMode='free';
+  currentFreeChecklistId=checklistId;
+  curOrderId='';
+  document.getElementById('wd-id').textContent='LIBRE-'+new Date().toISOString().slice(0,10);
+  document.getElementById('wd-name').textContent=ck.name||'Checklist libre';
+  document.getElementById('wd-loc').textContent='Sin orden asignada';
+  setWorkModeButtonLabel();
+
+  chkState={};
+  var dynHtml='';
+  ck.sections.forEach(function(sec,si){
+    if(sec.type==='checklist'){
+      dynHtml+='<div class="sec" style="margin-top:16px;">'+sec.title+'</div><div class="cl-list" id="cl-sec-'+si+'">';
+      (sec.items||[]).forEach(function(item,ii){
+        var key='s'+si+'i'+ii;
+        chkState[key]=false;
+        dynHtml+='<div class="ci" id="ci-'+key+'" onclick="toggleCheck(\''+key+'\')">'
+          +'<div class="ci-box" id="cb-'+key+'"></div>'
+          +'<span class="ci-lbl">'+item.text+'</span>'
+          +'<span class="ci-cat">'+(item.cat||'General')+'</span>'
+          +'</div>';
+      });
+      dynHtml+='</div>';
+    }
+    if(sec.type==='fields'){
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+sec.title+'</div>';
+      (sec.fields||[]).forEach(function(f){
+        dynHtml+='<div class="dyn-field"><label>'+f.label+'</label>';
+        if(f.inputType==='textarea') dynHtml+='<textarea class="ft" id="df-'+f.id+'" placeholder="'+f.label+'..."></textarea>';
+        else dynHtml+='<input class="fi" id="df-'+f.id+'" type="'+f.inputType+'" placeholder="'+f.label+'">';
+        dynHtml+='</div>';
+      });
+      dynHtml+='</div>';
+    }
+    if(sec.type==='textarea'){
+      dynHtml+='<div class="fg" style="margin-top:14px;"><label class="fl">'+sec.title+'</label>'
+        +'<textarea class="ft" id="dta-'+sec.id+'" placeholder="'+sec.placeholder+'"></textarea></div>';
+    }
+  });
+
+  if(!dynHtml){
+    chkState['s0i0']=false;
+    dynHtml='<div class="sec" style="margin-top:16px;">Actividades</div><div class="cl-list"><div class="ci" id="ci-s0i0" onclick="toggleCheck(\'s0i0\')"><div class="ci-box" id="cb-s0i0"></div><span class="ci-lbl">Revisión general</span><span class="ci-cat">General</span></div></div>';
+  }
+
+  document.getElementById('wd-dynamic').innerHTML=dynHtml;
+  sigSigned=false;
+  document.getElementById('sig-st').textContent='Sin firmar';
+  resetPhotoSlots();
+  clearSig();
+  updateProg();
+  document.getElementById('wd-wrap').style.display='block';
+  setTimeout(function(){ document.getElementById('wd-wrap').scrollIntoView({behavior:'smooth'}); },80);
 }
 
 function openWork(id){
   var o=null; for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===id){o=DB.orders[i];break;}
   if(!o) return;
+  currentWorkMode='order';
+  currentFreeChecklistId='';
   curOrderId=id;
   var cl=gClient(o.clientId),br=gBranch(o.branchId),ck=gCl(o.clId);
   document.getElementById('wd-id').textContent=o.id;
   document.getElementById('wd-name').textContent=o.type;
   document.getElementById('wd-loc').textContent=(cl?cl.name:'—')+' — '+(br?br.name:'—');
+  setWorkModeButtonLabel();
 
   chkState={};
   var dynHtml='';
@@ -1298,6 +1404,9 @@ function updateProg(){
   document.getElementById('wd-fill').style.width=pct+'%';
 }
 
+window.openFreeChecklist=openFreeChecklist;
+window.openTechOrdersSection=openTechOrdersSection;
+window.openTechChecklistSection=openTechChecklistSection;
 var selectedPhotoSlot=null;
 var pendingPhotos=[null,null,null];
 var closingOrderInProgress=false;
@@ -1859,8 +1968,8 @@ function initSig(){
 function markSig(){ sigSigned=true; document.getElementById('sig-c').classList.add('signed'); document.getElementById('sig-st').textContent='✓ Firmado'; }
 function clearSig(){ var c=document.getElementById('sig-c'); c.getContext('2d').clearRect(0,0,c.width,c.height); sigSigned=false; c.classList.remove('signed'); document.getElementById('sig-st').textContent='Sin firmar'; }
 
-function collectChecklistReportData(order,total,done){
-  var ck=gCl(order.clId);
+function collectChecklistReportData(checklist,total,done){
+  var ck=checklist||null;
   var respuestas={sections:[]},obs=[];
 
   if(ck){
@@ -1904,8 +2013,17 @@ async function closeOrder(){
   var keys=Object.keys(chkState),total=keys.length,done=keys.filter(function(k){return chkState[k];}).length;
   if(done<Math.ceil(total*0.5)){toast('⚠️ Completa al menos el 50% del check-list');return;}
   if(!sigSigned){toast('✏️ Se requiere la firma del responsable');return;}
-  var o=null; for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===curOrderId){o=DB.orders[i];break;}
-  if(!o)return;
+  var isFreeChecklist=currentWorkMode==='free';
+  var o=null;
+  var ck=null;
+  if(isFreeChecklist){
+    ck=gCl(currentFreeChecklistId);
+    if(!ck){ toast('⚠️ Checklist no disponible'); return; }
+  }else{
+    for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===curOrderId){o=DB.orders[i];break;}
+    if(!o)return;
+    ck=gCl(o.clId);
+  }
 
   if(typeof window.saveReportToFirestore!=='function'){
     toast('⚠️ Módulo de reportes no disponible');
@@ -1916,12 +2034,22 @@ async function closeOrder(){
   var closeBtn=document.querySelector('#wd-wrap .btn.btn-success');
   if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
 
-  var ck=gCl(o.clId),tc=gTech(o.techId),cl=gClient(o.clientId),br=gBranch(o.branchId),captured=collectChecklistReportData(o,total,done);
+  var tc=isFreeChecklist
+    ? {id:TECH_CONTEXT.techId||TECH_CONTEXT.uid,name:TECH_CONTEXT.name||TECH_CONTEXT.email||'Técnico'}
+    : gTech(o.techId);
+  var cl=isFreeChecklist?null:gClient(o.clientId);
+  var br=isFreeChecklist?null:gBranch(o.branchId);
+  var captured=collectChecklistReportData(ck,total,done);
   try{
     var locationData=await getTabletLocationForReport();
     if(!locationData || typeof locationData.lat!=='number' || typeof locationData.lng!=='number'){
       throw new Error('No se pudo capturar ubicación GPS');
     }
+
+    var reportOrderId=isFreeChecklist
+      ? ('FREE-'+Date.now())
+      : o.id;
+    var signatureData=document.getElementById('sig-c').toDataURL('image/png');
 
     var imagenes=pendingPhotos
       .map(function(p,idx){ return p && p.file ? {slotIndex:idx,file:p.file} : null; })
@@ -1932,7 +2060,7 @@ async function closeOrder(){
 
     console.log('[closeOrder] Inicio de subida. Imágenes:',imagenes.length);
     var urls=await Promise.all(imagenes.map(async function(img){
-      var url=await window.uploadEvidenceImage(img.file,{orderId:o.id,slotIndex:img.slotIndex});
+      var url=await window.uploadEvidenceImage(img.file,{orderId:reportOrderId,slotIndex:img.slotIndex});
       if(pendingPhotos[img.slotIndex]) pendingPhotos[img.slotIndex].url=url;
       console.log('[closeOrder] Imagen subida slot',img.slotIndex,'url:',url);
       return url;
@@ -1940,13 +2068,19 @@ async function closeOrder(){
     console.log('[closeOrder] Fin de subida. URLs:',urls.length);
 
     var reportData={
-      ordenId:o.id,
-      tecnicoId:o.techId,
+      ordenId:reportOrderId,
+      tecnicoUid:TECH_CONTEXT.uid||'',
+      tecnicoId:(isFreeChecklist?(TECH_CONTEXT.techId||TECH_CONTEXT.uid):(o.techId||'')),
       tecnicoNombre:tc?tc.name:'',
-      checklist:{id:o.clId,name:ck?ck.name:'—'},
+      checklistId:ck?ck.id:'',
+      checklistNombre:ck?ck.name:'',
+      checklist:{id:ck?ck.id:'',name:ck?ck.name:'—'},
       respuestas:captured.respuestas,
-      observaciones:captured.observaciones||o.desc||'',
+      observaciones:captured.observaciones||(isFreeChecklist?'':(o.desc||'')),
       fotos:urls,
+      firma:signatureData,
+      tipo:isFreeChecklist?'checklist_libre':'orden_asignada',
+      sucursalNombre:br?br.name:'',
       ubicacion:{
         lat:locationData.lat,
         lng:locationData.lng,
@@ -1954,6 +2088,10 @@ async function closeOrder(){
         direccionAprox:locationData.address||'',
         capturedAt:locationData.capturedAt||new Date().toISOString(),
         source:'navigator.geolocation'
+      },
+      geolocalizacion:{
+        lat:locationData.lat,
+        lng:locationData.lng
       }
     };
 
@@ -1968,14 +2106,14 @@ async function closeOrder(){
         .filter(function(src){ return !!src; });
       var signatureData=document.getElementById('sig-c').toDataURL('image/png');
       var pdfInfo=createAndStoreReportPdf({
-        ordenId:o.id,
+        ordenId:reportOrderId,
         fecha:new Date(),
-        tecnicoNombre:tc?tc.name:'',
-        clienteNombre:cl?cl.name:'—',
-        sucursalNombre:br?br.name:'—',
-        tipoMantenimiento:o.type||'—',
+        tecnicoNombre:tc?tc.name:(TECH_CONTEXT.name||''),
+        clienteNombre:isFreeChecklist?'Checklist libre':(cl?cl.name:'—'),
+        sucursalNombre:isFreeChecklist?'Sin sucursal':(br?br.name:'—'),
+        tipoMantenimiento:isFreeChecklist?'Checklist Libre':(o.type||'—'),
         checklistNombre:ck?ck.name:'—',
-        descripcionServicio:captured.observaciones||o.desc||'Sin observaciones registradas.',
+        descripcionServicio:captured.observaciones||(isFreeChecklist?'Sin observaciones registradas.':(o.desc||'Sin observaciones registradas.')),
         respuestas:captured.respuestas,
         photoPreviews:photoPreviews,
         signatureData:signatureData
@@ -1987,12 +2125,22 @@ async function closeOrder(){
       toast('⚠️ Reporte guardado, pero no se pudo generar el PDF');
     }
 
-    o.status='done';
+    if(!isFreeChecklist){ o.status='done'; }
     document.getElementById('wd-wrap').style.display='none';
-    buildReport(o,locationData);
+    if(!isFreeChecklist){
+      buildReport(o,locationData);
+    }
+    if(isFreeChecklist){
+      currentWorkMode='order';
+      currentFreeChecklistId='';
+      setWorkModeButtonLabel();
+    }
     goTo('report',document.getElementById('ni-report'));
+    if(typeof window.loadReportsIntoPanel==='function'){
+      window.loadReportsIntoPanel();
+    }
     renderTechView(); renderDashboard();
-    toast('✅ Reporte generado y guardado');
+    toast(isFreeChecklist?'✅ Checklist libre guardado':'✅ Reporte generado y guardado');
     }catch(err){
       console.error('Error en cierre de orden:',err);
       var emsg=String((err&&err.message)||'');
@@ -2003,7 +2151,7 @@ async function closeOrder(){
       }
   }finally{
     closingOrderInProgress=false;
-    if(closeBtn){ closeBtn.disabled=false; closeBtn.style.opacity=''; closeBtn.textContent='✓ Cerrar Orden y Generar Reporte'; }
+    if(closeBtn){ closeBtn.disabled=false; closeBtn.style.opacity=''; setWorkModeButtonLabel(); }
   }
 }
 
@@ -2053,7 +2201,7 @@ function buildReport(o,locationData){
     +'<button class="btn btn-primary" onclick="downloadLastReportPdf()">⬇ Descargar PDF</button>'
     +'</div>'
     +'<div class="rpt">'
-    +'<div class="rpt-head"><div><div class="rpt-brand">MantenPro</div><div class="rpt-sub">Servicios de Mantenimiento Comercial · Monterrey, NL</div></div><div class="rpt-badge">REPORTE OFICIAL</div></div>'
+    +'<div class="rpt-head"><div><div class="rpt-brand">BRISAM</div><div class="rpt-sub">Servicios de Mantenimiento Comercial · Monterrey, NL</div></div><div class="rpt-badge">REPORTE OFICIAL</div></div>'
     +'<div class="rdiv"></div>'
     +'<div class="rst">Información de la Orden</div>'
     +'<div class="rgrid">'
@@ -2072,12 +2220,13 @@ function buildReport(o,locationData){
     +'<div class="rdiv"></div>'
     +'<div class="rst">Firma de conformidad</div>'
     +'<div class="rsig"><img src="'+sigData+'" style="height:55px;max-width:100%;"><div class="rsig-lbl">Responsable en sucursal — '+(br?br.name:'—')+'</div></div>'
-    +'<div class="rfoot"><div class="rfoot-brand">MantenPro</div><div class="rfoot-meta">Generado: '+now+' · '+o.id+'</div></div>'
+    +'<div class="rfoot"><div class="rfoot-brand">BRISAM</div><div class="rfoot-meta">Generado: '+now+' · '+o.id+'</div></div>'
     +'</div>';
 }
 
 bindPhotoInput();
 initSig();
+setWorkModeButtonLabel();
 renderDashboard();
 </script>
 <script type="module">

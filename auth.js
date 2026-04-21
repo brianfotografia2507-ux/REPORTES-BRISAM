@@ -43,6 +43,9 @@ var allLoadedReports = [];
 var selectedReportForPreview = null;
 var reportFilters = {
   tecnico: "",
+  checklist: "",
+  sucursal: "",
+  tipo: "",
   from: "",
   to: "",
 };
@@ -250,6 +253,7 @@ async function loadUserState(user) {
     currentUserProfile = profile || {};
     setUserHeader(profile || {}, user.email || "");
     showApp(true);
+    syncRuntimeCollectionsForUser(user, currentUserProfile);
     goRoleLanding(role);
   } catch (err) {
     await signOut(auth);
@@ -610,7 +614,7 @@ function renderReportPreviewPanel(item) {
   container.innerHTML =
     actions +
     '<div class="rpt">' +
-    '<div class="rpt-head"><div><div class="rpt-brand">MantenPro</div><div class="rpt-sub">Vista previa de reporte</div></div><div class="rpt-badge">FOLIO ' +
+    '<div class="rpt-head"><div><div class="rpt-brand">BRISAM</div><div class="rpt-sub">Vista previa de reporte</div></div><div class="rpt-badge">FOLIO ' +
     escapeHtml(data.ordenId || item.id) +
     "</div></div>" +
     '<div class="rdiv"></div>' +
@@ -717,9 +721,28 @@ function reportDayEnd(value) {
 
 function getUniqueTechnicians(reportDocs) {
   var names = {};
-  reportDocs.forEach(function (item) {
+  (reportDocs || []).forEach(function (item) {
     var name = (item.data && item.data.tecnicoNombre) || "";
     if (name) names[name] = true;
+  });
+  return Object.keys(names).sort();
+}
+
+function getUniqueChecklistNames(reportDocs) {
+  var names = {};
+  (reportDocs || []).forEach(function (item) {
+    var data = item.data || {};
+    var checklist = data.checklistNombre || (data.checklist && data.checklist.name) || "";
+    if (checklist) names[checklist] = true;
+  });
+  return Object.keys(names).sort();
+}
+
+function getUniqueBranchNames(reportDocs) {
+  var names = {};
+  (reportDocs || []).forEach(function (item) {
+    var branch = (item.data && item.data.sucursalNombre) || "";
+    if (branch) names[branch] = true;
   });
   return Object.keys(names).sort();
 }
@@ -729,12 +752,22 @@ function applyReportFilters(reportDocs) {
   var fromMs = reportDayStart(reportFilters.from);
   var toMs = reportDayEnd(reportFilters.to);
   var tech = reportFilters.tecnico;
+  var checklist = reportFilters.checklist;
+  var sucursal = reportFilters.sucursal;
+  var tipo = reportFilters.tipo;
 
   return base
     .filter(function (item) {
       var data = item.data || {};
       var ms = asMillis(data.fecha);
       if (tech && data.tecnicoNombre !== tech) return false;
+      var checklistLabel =
+        data.checklistNombre ||
+        (data.checklist && data.checklist.name) ||
+        "";
+      if (checklist && checklistLabel !== checklist) return false;
+      if (sucursal && (data.sucursalNombre || "") !== sucursal) return false;
+      if (tipo && (data.tipo || "orden_asignada") !== tipo) return false;
       if (fromMs && ms && ms < fromMs) return false;
       if (toMs && ms && ms > toMs) return false;
       if ((fromMs || toMs) && !ms) return false;
@@ -758,6 +791,8 @@ async function getFirestoreReadApi() {
         getDocs: mod.getDocs,
         query: mod.query,
         where: mod.where,
+        orderBy: mod.orderBy,
+        limit: mod.limit,
       };
     })
     .catch(function (err) {
@@ -768,6 +803,249 @@ async function getFirestoreReadApi() {
   return firestoreReadApiPromise;
 }
 
+function toMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  if (typeof value.seconds === "number") return value.seconds * 1000;
+  if (typeof value === "number") return value;
+  var parsed = Date.parse(value);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+function formatAnyDate(value) {
+  var ms = toMillis(value);
+  if (!ms) return "—";
+  return new Date(ms).toLocaleString("es-MX", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function normalizeOrderStatus(value) {
+  var raw = String(value || "").toLowerCase();
+  if (raw === "done" || raw === "completada" || raw === "completed") return "done";
+  if (raw === "progress" || raw === "en_progreso" || raw === "in_progress") return "progress";
+  return "pending";
+}
+
+async function readCollectionCandidates(readApi, names) {
+  if (!readApi || !Array.isArray(names)) return [];
+  var firstReadable = [];
+  for (var i = 0; i < names.length; i += 1) {
+    var colName = names[i];
+    try {
+      var snap = await readApi.getDocs(collection(db, colName));
+      var docs = snap.docs.map(function (d) {
+        var data = d.data() || {};
+        if (!data.id) data.id = d.id;
+        return data;
+      });
+      if (!firstReadable.length) firstReadable = docs;
+      if (docs.length) return docs;
+    } catch (_err) {
+      // Silencioso: intentamos el siguiente candidato.
+    }
+  }
+  return firstReadable;
+}
+
+function mapTechniciansFromUsers(userDocs) {
+  return (userDocs || [])
+    .filter(function (u) {
+      return String((u && u.role) || "").toLowerCase() === "tecnico";
+    })
+    .map(function (u) {
+      var uid = u.uid || u.id || "";
+      var online = u.online !== false && String(u.status || "").toLowerCase() !== "offline";
+      return {
+        id: uid || u.email || Math.random().toString(36).slice(2, 8),
+        uid: uid,
+        name: u.name || u.nombre || u.email || "Técnico",
+        spec: u.especialidad || u.spec || "",
+        email: u.email || "",
+        phone: u.phone || u.telefono || "",
+        status: online ? "active" : "inactive",
+        online: online,
+      };
+    });
+}
+
+function mapChecklistDocs(checklistDocs) {
+  return (checklistDocs || []).map(function (item) {
+    return {
+      id: item.id || "",
+      name: item.name || item.nombre || "Checklist",
+      type: item.type || item.tipo || "General",
+      sections: Array.isArray(item.sections)
+        ? item.sections
+        : Array.isArray(item.secciones)
+        ? item.secciones
+        : [],
+      status: item.status || (item.active === false ? "inactive" : "active"),
+      active: item.active !== false && String(item.status || "").toLowerCase() !== "inactive",
+    };
+  });
+}
+
+function mapOrdersDocs(orderDocs) {
+  return (orderDocs || []).map(function (o) {
+    var createdRef = o.createdAt || o.fecha || o.date;
+    return {
+      id: o.id || o.folio || "",
+      type: o.type || o.tipo || "Orden de trabajo",
+      clientId: o.clientId || o.clienteId || "",
+      branchId: o.branchId || o.sucursalId || "",
+      techId: o.techId || o.tecnicoId || o.tecnicoUid || "",
+      techUid: o.techUid || o.tecnicoUid || "",
+      clId: o.clId || o.checklistId || (o.checklist && o.checklist.id) || "",
+      priority: o.priority || o.prioridad || "Normal",
+      desc: o.desc || o.descripcion || "",
+      status: normalizeOrderStatus(o.status || o.estado),
+      date: o.date || o.fechaTexto || formatAnyDate(createdRef),
+      createdAt: createdRef || null,
+      updatedAt: o.updatedAt || createdRef || null,
+    };
+  });
+}
+
+function mapClientsDocs(clientDocs) {
+  return (clientDocs || []).map(function (c) {
+    return {
+      id: c.id || "",
+      name: c.name || c.nombre || "Cliente",
+      contact: c.contact || c.contacto || "",
+      phone: c.phone || c.telefono || "",
+      email: c.email || "",
+      notes: c.notes || c.notas || "",
+    };
+  });
+}
+
+function mapBranchesDocs(branchDocs) {
+  return (branchDocs || []).map(function (b) {
+    return {
+      id: b.id || "",
+      clientId: b.clientId || b.clienteId || "",
+      name: b.name || b.nombre || "Sucursal",
+      address: b.address || b.direccion || "",
+      contact: b.contact || b.contacto || "",
+      phone: b.phone || b.telefono || "",
+      status: b.status || "active",
+    };
+  });
+}
+
+function mapEquipmentDocs(equipmentDocs) {
+  return (equipmentDocs || []).map(function (e) {
+    return {
+      id: e.id || "",
+      branchId: e.branchId || e.sucursalId || "",
+      name: e.name || e.nombre || "Equipo",
+      type: e.type || e.tipo || "",
+      brand: e.brand || e.marca || "",
+      model: e.model || e.modelo || "",
+      year: e.year || e.anio || "",
+      status: e.status || "active",
+      notes: e.notes || e.notas || "",
+    };
+  });
+}
+
+async function loadRuntimeCollections(readApi, user, profile) {
+  if (!readApi || !user) return null;
+  var usersDocs = await readCollectionCandidates(readApi, ["users"]);
+  var checklistDocs = await readCollectionCandidates(readApi, ["checklists", "checklist"]);
+  var orderDocs = await readCollectionCandidates(readApi, ["orders", "ordenes"]);
+  var clientDocs = await readCollectionCandidates(readApi, ["clients", "clientes"]);
+  var branchDocs = await readCollectionCandidates(readApi, ["branches", "sucursales"]);
+  var equipmentDocs = await readCollectionCandidates(readApi, ["equipment", "equipos"]);
+
+  var mappedTechs = mapTechniciansFromUsers(usersDocs);
+  if (
+    mappedTechs.length &&
+    !mappedTechs.some(function (t) {
+      return t.uid === user.uid || t.id === user.uid;
+    })
+  ) {
+    mappedTechs.push({
+      id: user.uid,
+      uid: user.uid,
+      name: (profile && profile.name) || user.displayName || user.email || "Técnico",
+      spec: (profile && (profile.especialidad || profile.spec)) || "",
+      email: user.email || "",
+      phone: (profile && (profile.phone || profile.telefono)) || "",
+      status: "active",
+      online: true,
+    });
+  }
+
+  return {
+    technicians: mappedTechs,
+    checklists: mapChecklistDocs(checklistDocs).filter(function (c) {
+      return c.active !== false;
+    }),
+    orders: mapOrdersDocs(orderDocs),
+    clients: mapClientsDocs(clientDocs),
+    branches: mapBranchesDocs(branchDocs),
+    equipment: mapEquipmentDocs(equipmentDocs),
+  };
+}
+
+function applyRuntimeDataToUi(runtimePayload, user, profile) {
+  if (!runtimePayload || !user) return;
+  if (typeof window.setFirestoreRuntimeData === "function") {
+    window.setFirestoreRuntimeData(runtimePayload);
+  }
+  if (typeof window.setAuthenticatedTechProfile === "function") {
+    window.setAuthenticatedTechProfile({
+      uid: user.uid,
+      techId: user.uid,
+      name: (profile && profile.name) || user.displayName || user.email || "Técnico",
+      email: user.email || (profile && profile.email) || "",
+      role: (profile && profile.role) || "",
+      spec: (profile && (profile.especialidad || profile.spec)) || "",
+      online:
+        (!profile || profile.online !== false) &&
+        String((profile && profile.status) || "").toLowerCase() !== "offline",
+    });
+  }
+}
+
+async function syncRuntimeCollectionsForUser(user, profile) {
+  if (!firebaseAvailable || !user) return;
+  try {
+    var readApi = await getFirestoreReadApi();
+    if (!readApi || !readApi.getDocs || !readApi.query || !readApi.where) return;
+    var runtimeData = await loadRuntimeCollections(readApi, user, profile || {});
+    applyRuntimeDataToUi(runtimeData, user, profile || {});
+  } catch (err) {
+    console.warn("No se pudo sincronizar runtime collections:", err);
+  }
+}
+
+function getUniqueChecklistNames(reportDocs) {
+  var names = {};
+  (reportDocs || []).forEach(function (item) {
+    var data = (item && item.data) || {};
+    var label = data.checklistNombre || (data.checklist && data.checklist.name) || "";
+    if (label) names[label] = true;
+  });
+  return Object.keys(names).sort();
+}
+
+function getUniqueBranchNames(reportDocs) {
+  var names = {};
+  (reportDocs || []).forEach(function (item) {
+    var data = (item && item.data) || {};
+    var label = data.sucursalNombre || "";
+    if (label) names[label] = true;
+  });
+  return Object.keys(names).sort();
+}
+
 function renderReportsInPanel(reportDocs) {
   var container = $("rpt-content");
   if (!container) return;
@@ -775,6 +1053,8 @@ function renderReportsInPanel(reportDocs) {
   var filtered = applyReportFilters(reportDocs);
   var showAdminFilters = currentRole === "administrador";
   var technicians = getUniqueTechnicians(reportDocs);
+  var checklistNames = getUniqueChecklistNames(reportDocs);
+  var branchNames = getUniqueBranchNames(reportDocs);
   var filtersHtml =
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
     (showAdminFilters
@@ -793,6 +1073,53 @@ function renderReportsInPanel(reportDocs) {
             );
           })
           .join("") +
+        "</select>"
+      : "") +
+    (showAdminFilters
+      ? '<select class="fs" id="rp-filter-checklist" style="width:240px;">' +
+        '<option value="">— Todos los checklist —</option>' +
+        checklistNames
+          .map(function (name) {
+            return (
+              '<option value="' +
+              escapeHtml(name) +
+              '"' +
+              (reportFilters.checklist === name ? " selected" : "") +
+              ">" +
+              escapeHtml(name) +
+              "</option>"
+            );
+          })
+          .join("") +
+        "</select>"
+      : "") +
+    (showAdminFilters
+      ? '<select class="fs" id="rp-filter-branch" style="width:220px;">' +
+        '<option value="">— Todas las sucursales —</option>' +
+        branchNames
+          .map(function (name) {
+            return (
+              '<option value="' +
+              escapeHtml(name) +
+              '"' +
+              (reportFilters.sucursal === name ? " selected" : "") +
+              ">" +
+              escapeHtml(name) +
+              "</option>"
+            );
+          })
+          .join("") +
+        "</select>"
+      : "") +
+    (showAdminFilters
+      ? '<select class="fs" id="rp-filter-type" style="width:190px;">' +
+        '<option value="">— Todos los tipos —</option>' +
+        '<option value="orden_asignada"' +
+        (reportFilters.tipo === "orden_asignada" ? " selected" : "") +
+        ">Órdenes asignadas</option>' +
+        '<option value="checklist_libre"' +
+        (reportFilters.tipo === "checklist_libre" ? " selected" : "") +
+        ">Checklist libres</option>' +
         "</select>"
       : "") +
     '<input class="fi" id="rp-filter-from" type="date" value="' +
@@ -820,7 +1147,6 @@ function renderReportsInPanel(reportDocs) {
       var tecnico = data.tecnicoNombre || "—";
       var fecha = formatReportDate(data.fecha);
       var observaciones = (data.observaciones || "").trim();
-      var preview = observaciones ? escapeHtml(observaciones).slice(0, 180) : "Sin observaciones";
       var progreso =
         data.respuestas &&
         data.respuestas.progreso &&
@@ -844,6 +1170,7 @@ function renderReportsInPanel(reportDocs) {
             .join("") +
           "</div>"
         : "";
+      var reportType = String(data.tipo || "orden_asignada") === "checklist_libre" ? "Checklist libre" : "Orden asignada";
 
       return (
         '<div class="card" style="cursor:pointer;" data-report-id="' +
@@ -862,6 +1189,7 @@ function renderReportsInPanel(reportDocs) {
         "<span>👷 " + escapeHtml(tecnico) + "</span>" +
         "<span>📅 " + escapeHtml(fecha) + "</span>" +
         "<span>📈 Progreso: " + escapeHtml(progreso) + "</span>" +
+        "<span>🧾 " + escapeHtml(reportType) + "</span>" +
         "<span>" + escapeHtml(locationMeta) + "</span>" +
         "</div>" +
         '<div style="margin-top:10px;font-size:12px;color:var(--muted2);line-height:1.45;">' +
@@ -893,10 +1221,31 @@ function wireReportFilterEvents(showAdminFilters) {
   var toInput = $("rp-filter-to");
   var clearBtn = $("rp-filter-clear");
   var techSelect = $("rp-filter-tech");
+  var checklistSelect = $("rp-filter-checklist");
+  var branchSelect = $("rp-filter-branch");
+  var typeSelect = $("rp-filter-type");
 
   if (showAdminFilters && techSelect) {
     techSelect.onchange = function () {
       reportFilters.tecnico = this.value || "";
+      renderReportsInPanel(allLoadedReports);
+    };
+  }
+  if (showAdminFilters && checklistSelect) {
+    checklistSelect.onchange = function () {
+      reportFilters.checklist = this.value || "";
+      renderReportsInPanel(allLoadedReports);
+    };
+  }
+  if (showAdminFilters && branchSelect) {
+    branchSelect.onchange = function () {
+      reportFilters.sucursal = this.value || "";
+      renderReportsInPanel(allLoadedReports);
+    };
+  }
+  if (showAdminFilters && typeSelect) {
+    typeSelect.onchange = function () {
+      reportFilters.tipo = this.value || "";
       renderReportsInPanel(allLoadedReports);
     };
   }
@@ -915,6 +1264,9 @@ function wireReportFilterEvents(showAdminFilters) {
   if (clearBtn) {
     clearBtn.onclick = function () {
       reportFilters.tecnico = "";
+      reportFilters.checklist = "";
+      reportFilters.sucursal = "";
+      reportFilters.tipo = "";
       reportFilters.from = "";
       reportFilters.to = "";
       renderReportsInPanel(allLoadedReports);
@@ -998,6 +1350,20 @@ window.loadReportsIntoPanel = async function loadReportsIntoPanel() {
   }
 };
 
+window.loadRuntimeDataForUi = async function loadRuntimeDataForUi() {
+  if (!firebaseAvailable || !auth.currentUser) return;
+  try {
+    var readApi = await getFirestoreReadApi();
+    if (!readApi || !readApi.getDocs || !readApi.query || !readApi.where) {
+      return;
+    }
+    var runtimeData = await loadRuntimeCollections(readApi, auth.currentUser, currentUserProfile || {});
+    applyRuntimeDataToUi(runtimeData, auth.currentUser, currentUserProfile || {});
+  } catch (err) {
+    console.warn("No se pudo cargar data runtime:", err);
+  }
+};
+
 setupEvents();
 
 if (!firebaseAvailable) {
@@ -1013,6 +1379,7 @@ if (!firebaseAvailable) {
   onAuthStateChanged(auth, function (user) {
     loadUserState(user);
     if (user) {
+      syncRuntimeCollectionsForUser(user, currentUserProfile || {});
       window.loadReportsIntoPanel();
     }
   });
