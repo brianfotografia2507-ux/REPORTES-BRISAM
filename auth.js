@@ -1116,10 +1116,10 @@ function renderReportsInPanel(reportDocs) {
         '<option value="">— Todos los tipos —</option>' +
         '<option value="orden_asignada"' +
         (reportFilters.tipo === "orden_asignada" ? " selected" : "") +
-        ">Órdenes asignadas</option>' +
+        '>Órdenes asignadas</option>' +
         '<option value="checklist_libre"' +
         (reportFilters.tipo === "checklist_libre" ? " selected" : "") +
-        ">Checklist libres</option>' +
+        '>Checklist libres</option>' +
         "</select>"
       : "") +
     '<input class="fi" id="rp-filter-from" type="date" value="' +
