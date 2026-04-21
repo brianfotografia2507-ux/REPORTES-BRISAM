@@ -69,3 +69,19 @@ Una vez online:
 - Usa **Agregar a pantalla de inicio**.
 
 > Nota: para experiencia PWA completa (modo app nativo, íconos, splash), el siguiente paso es agregar `manifest.webmanifest` y service worker.
+
+## Logos (principal y favicon)
+
+Para personalizar branding en la app:
+
+1. Coloca tus imágenes en una carpeta `assets/`:
+   - `assets/logo-main.png` (logo principal, imagen 2)
+   - `assets/favicon.png` (favicon, imagen 1)
+
+2. El `index.html` ya está preparado para tomarlas de esas rutas.
+
+Si tus nombres son diferentes, solo actualiza esas rutas en:
+
+- `<link rel="icon" href="...">`
+- `<img id="brand-logo-main" src="...">`
+- `<img id="brand-logo-auth" src="...">`

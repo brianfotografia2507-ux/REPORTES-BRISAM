@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MantenPro</title>
+<link rel="icon" type="image/png" href="./assets/brisam-favicon.png">
+<link rel="apple-touch-icon" href="./assets/brisam-favicon.png">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -26,6 +28,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .s-logo-text{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;letter-spacing:-.5px;}
 .s-logo-text span{color:var(--accent);}
 .s-logo-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+.s-logo-main{display:block;max-width:162px;width:100%;height:auto;}
 .s-close-btn{display:none;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px;}
 .s-nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
 .s-section{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:12px 8px 4px;}
@@ -235,6 +238,7 @@ canvas.sig.signed{border-color:var(--green);}
 .auth-card{width:100%;max-width:460px;background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:22px;}
 .auth-brand{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;letter-spacing:-.5px;}
 .auth-brand span{color:var(--accent);}
+.auth-brand-logo{display:block;max-width:300px;width:100%;height:auto;margin-bottom:8px;}
 .auth-sub{font-size:12px;color:var(--muted);margin:4px 0 16px;}
 .auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
 .auth-tab{padding:9px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--muted2);font-size:12px;cursor:pointer;font-weight:600;}
@@ -307,7 +311,7 @@ canvas.sig.signed{border-color:var(--green);}
 <body>
 <div id="auth-view" class="auth-wrap">
   <div class="auth-card">
-    <div class="auth-brand">Manten<span>Pro</span></div>
+    <img class="auth-brand-logo" src="./assets/brisam-logo.png" alt="BRISAM">
     <div class="auth-sub">Ingresa para administrar reportes y órdenes.</div>
     <div class="auth-tabs">
       <button class="auth-tab on" id="tab-login" type="button">Iniciar sesión</button>
@@ -360,7 +364,7 @@ canvas.sig.signed{border-color:var(--green);}
 <aside class="sidebar" id="sidebar">
   <div class="s-logo">
     <div>
-      <div class="s-logo-text">Manten<span>Pro</span></div>
+      <img class="s-logo-main" src="./assets/brisam-logo.png" alt="BRISAM">
       <div class="s-logo-sub">Sistema de Mantenimiento</div>
     </div>
     <button class="s-close-btn" onclick="closeSidebar()">✕</button>
