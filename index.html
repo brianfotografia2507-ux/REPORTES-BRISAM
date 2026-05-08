@@ -161,6 +161,17 @@ tr:hover td{background:rgba(26,34,53,.5);}
 
 /* ── TECH PAGE ── */
 .tech-hdr{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin-bottom:18px;display:flex;align-items:center;gap:14px;}
+.tech-live-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:-6px 0 16px;display:flex;flex-direction:column;gap:8px;}
+.tech-live-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted2);}
+.tech-live-row strong{font-size:12px;color:var(--text);font-weight:600;}
+.live-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--border);border-radius:999px;font-size:11px;background:var(--surface2);color:var(--muted2);}
+.live-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);}
+.live-pill.ok{color:var(--green);border-color:rgba(34,197,94,.35);}
+.live-pill.ok .dot{background:var(--green);}
+.live-pill.warn{color:var(--yellow);border-color:rgba(234,179,8,.35);}
+.live-pill.warn .dot{background:var(--yellow);}
+.live-pill.err{color:var(--red);border-color:rgba(239,68,68,.35);}
+.live-pill.err .dot{background:var(--red);}
 .wo-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:14px;}
 .wo-top{padding:18px;background:linear-gradient(135deg,rgba(249,115,22,.08),transparent);border-bottom:1px solid var(--border);}
 .wo-id{font-size:10px;color:var(--accent);font-weight:600;letter-spacing:1px;text-transform:uppercase;}
@@ -442,9 +453,17 @@ canvas.sig.signed{border-color:var(--green);}
       <div class="av" id="tv-av" style="width:44px;height:44px;border-radius:12px;font-size:16px;background:linear-gradient(135deg,var(--accent),#c2410c);">JR</div>
       <div style="flex:1;">
         <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;" id="tv-name">—</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;"></span>Técnico de campo · En línea</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="tv-subline"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;"></span>Técnico de campo · En línea</div>
       </div>
       <select class="fs" style="width:auto;" id="tv-sel" onchange="switchTech(this.value)"></select>
+    </div>
+    <div class="tech-live-card" id="tv-live-card">
+      <div class="tech-live-row">
+        <strong id="tv-gps-active">📍 GPS inactivo</strong>
+        <span class="live-pill" id="tv-live-conn-pill"><span class="dot"></span><span id="tv-live-conn-label">Sin conexión</span></span>
+      </div>
+      <div class="tech-live-row"><span>Última sincronización</span><strong id="tv-gps-last">—</strong></div>
+      <div class="tech-live-row"><span>Estado conexión</span><strong id="tv-gps-conn">Sin conexión</strong></div>
     </div>
     <div class="sec">Órdenes pendientes</div>
     <div id="tv-list"></div>
@@ -730,6 +749,61 @@ var DB = {
 var curOrderId=null, chkState={}, sigDraw=false, sigSigned=false;
 var tmpSections=[];
 window.dashboardReportsCache=Array.isArray(window.dashboardReportsCache)?window.dashboardReportsCache:[];
+var techLiveGpsState={
+  active:false,
+  lastSync:'',
+  connection:'Sin conexión',
+  error:'',
+  gps:'inactive'
+};
+
+function formatLiveSyncLabel(iso){
+  if(!iso) return '—';
+  var d=new Date(iso);
+  if(isNaN(d.getTime())) return '—';
+  return d.toLocaleString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function renderTechLiveGpsPanel(){
+  var activeEl=document.getElementById('tv-gps-active');
+  var lastEl=document.getElementById('tv-gps-last');
+  var connEl=document.getElementById('tv-gps-conn');
+  var pill=document.getElementById('tv-live-conn-pill');
+  var pillLabel=document.getElementById('tv-live-conn-label');
+  if(!activeEl || !lastEl || !connEl || !pill || !pillLabel) return;
+  activeEl.textContent=techLiveGpsState.active?'📍 GPS activo':'📍 GPS inactivo';
+  lastEl.textContent=formatLiveSyncLabel(techLiveGpsState.lastSync);
+  connEl.textContent=techLiveGpsState.connection||'Sin conexión';
+  pillLabel.textContent=techLiveGpsState.connection||'Sin conexión';
+  pill.classList.remove('ok','warn','err');
+  if(techLiveGpsState.active && (!techLiveGpsState.error || techLiveGpsState.error==='')){
+    pill.classList.add('ok');
+  }else if(techLiveGpsState.gps==='denied' || techLiveGpsState.gps==='unsupported'){
+    pill.classList.add('warn');
+  }else{
+    pill.classList.add('err');
+  }
+}
+
+window.updateLiveGpsUi=function updateLiveGpsUi(state){
+  techLiveGpsState=Object.assign({},techLiveGpsState,state||{});
+  renderTechLiveGpsPanel();
+};
+
+window.getCurrentActiveOrderId=function getCurrentActiveOrderId(){
+  return curOrderId||'';
+};
+
+window.getTechLiveStatus=function getTechLiveStatus(){
+  return curOrderId?'en_servicio':'disponible';
+};
+
+function notifyLiveTrackingContext(){
+  if(typeof window.notifyLiveTrackingContextChanged!=='function') return;
+  Promise.resolve(window.notifyLiveTrackingContextChanged()).catch(function(err){
+    console.warn('No se pudo sincronizar contexto live:',err);
+  });
+}
 
 // ══════════════ HELPERS ══════════════
 function uid(){ return '_'+Math.random().toString(36).substr(2,9); }
@@ -1203,6 +1277,7 @@ function renderTechView(){
   var found=false; for(var i=0;i<DB.technicians.length;i++) if(DB.technicians[i].id===prev){found=true;break;}
   if(found) sel.value=prev;
   switchTech(sel.value);
+  renderTechLiveGpsPanel();
 }
 
 function switchTech(tid){
@@ -1210,6 +1285,10 @@ function switchTech(tid){
   document.getElementById('tv-av').textContent=initials(t.name);
   document.getElementById('tv-av').style.background='linear-gradient(135deg,'+techColor(tid)+',#c2410c)';
   document.getElementById('tv-name').textContent=t.name;
+  var sub=document.getElementById('tv-subline');
+  if(sub){
+    sub.innerHTML='<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;"></span>'+(t.spec||'Técnico de campo')+' · En línea';
+  }
   var myOrders=DB.orders.filter(function(o){return o.techId===tid&&o.status!=='done';});
   var html=myOrders.map(function(o){
     var cl=gClient(o.clientId),br=gBranch(o.branchId),lbl=o.status==='pending'?'Pendiente':'En Progreso',cls=o.status==='pending'?'b-pend':'b-prog';
@@ -1220,12 +1299,15 @@ function switchTech(tid){
   }).join('');
   document.getElementById('tv-list').innerHTML=html||'<div class="empty"><div class="empty-ico">🎉</div>Sin órdenes pendientes</div>';
   document.getElementById('wd-wrap').style.display='none';
+  curOrderId=null;
+  notifyLiveTrackingContext();
 }
 
 function openWork(id){
   var o=null; for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===id){o=DB.orders[i];break;}
   if(!o) return;
   curOrderId=id;
+  notifyLiveTrackingContext();
   var cl=gClient(o.clientId),br=gBranch(o.branchId),ck=gCl(o.clId);
   document.getElementById('wd-id').textContent=o.id;
   document.getElementById('wd-name').textContent=o.type;
@@ -1988,6 +2070,8 @@ async function closeOrder(){
     }
 
     o.status='done';
+    curOrderId=null;
+    notifyLiveTrackingContext();
     document.getElementById('wd-wrap').style.display='none';
     buildReport(o,locationData);
     goTo('report',document.getElementById('ni-report'));
@@ -2079,6 +2163,7 @@ function buildReport(o,locationData){
 bindPhotoInput();
 initSig();
 renderDashboard();
+renderTechLiveGpsPanel();
 </script>
 <script type="module">
 (async function loadAuthModule(){

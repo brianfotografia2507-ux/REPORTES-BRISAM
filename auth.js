@@ -47,6 +47,26 @@ var reportFilters = {
   to: "",
 };
 var geocodeCache = {};
+var liveLocationWatcherId = null;
+var liveLocationTrackingUid = "";
+var liveLocationLastWriteAt = 0;
+var liveLocationLastCoords = null;
+var liveLocationLastStatus = "";
+var liveLocationLastOrder = "";
+var liveLocationLatestPosition = null;
+var liveLocationPulseTimer = null;
+var liveLocationUiState = {
+  active: false,
+  lastSync: "",
+  connection: "Sin conexión",
+  error: "",
+  gps: "inactive",
+};
+
+var LIVE_LOCATION_MIN_INTERVAL_MS = 60000;
+var LIVE_LOCATION_MIN_DISTANCE_M = 35;
+var LIVE_LOCATION_FAST_MOVE_INTERVAL_MS = 15000;
+var LIVE_LOCATION_PULSE_MS = 20000;
 
 function withTimeout(promise, ms, label) {
   return new Promise(function (resolve, reject) {
@@ -234,6 +254,14 @@ async function loadUserState(user) {
   if (!user) {
     currentRole = null;
     currentUserProfile = null;
+    stopLiveLocationTracking();
+    emitLiveLocationUiState({
+      active: false,
+      connection: "Sin sesión",
+      lastSync: "",
+      error: "",
+      gps: "inactive",
+    });
     showApp(false);
     return;
   }
@@ -251,10 +279,290 @@ async function loadUserState(user) {
     setUserHeader(profile || {}, user.email || "");
     showApp(true);
     goRoleLanding(role);
+    if (role === "tecnico") {
+      startLiveLocationTracking(user, profile || {}).catch(function (err) {
+        console.warn("No se pudo iniciar tracking GPS live:", err);
+      });
+    } else {
+      stopLiveLocationTracking();
+      emitLiveLocationUiState({
+        active: false,
+        connection: "No aplica para administrador",
+        lastSync: "",
+        error: "",
+        gps: "inactive",
+      });
+    }
   } catch (err) {
+    stopLiveLocationTracking();
     await signOut(auth);
     setAuthMessage("No fue posible cargar el perfil del usuario.", "error");
   }
+}
+
+function emitLiveLocationUiState(patch) {
+  liveLocationUiState = Object.assign({}, liveLocationUiState, patch || {});
+  if (typeof window.updateLiveGpsUi === "function") {
+    try {
+      window.updateLiveGpsUi(liveLocationUiState);
+    } catch (err) {
+      console.warn("No se pudo actualizar UI GPS:", err);
+    }
+  }
+}
+
+function toFixedNumber(value, digits) {
+  if (typeof value !== "number" || !isFinite(value)) return null;
+  return Number(value.toFixed(digits));
+}
+
+function geoDistanceMeters(aLat, aLng, bLat, bLng) {
+  if (
+    typeof aLat !== "number" ||
+    typeof aLng !== "number" ||
+    typeof bLat !== "number" ||
+    typeof bLng !== "number"
+  ) {
+    return Infinity;
+  }
+  var earth = 6371000;
+  var dLat = ((bLat - aLat) * Math.PI) / 180;
+  var dLng = ((bLng - aLng) * Math.PI) / 180;
+  var sinLat = Math.sin(dLat / 2);
+  var sinLng = Math.sin(dLng / 2);
+  var q =
+    sinLat * sinLat +
+    Math.cos((aLat * Math.PI) / 180) *
+      Math.cos((bLat * Math.PI) / 180) *
+      sinLng *
+      sinLng;
+  return 2 * earth * Math.atan2(Math.sqrt(q), Math.sqrt(1 - q));
+}
+
+function liveContextFromUi() {
+  var activeOrder = "";
+  if (typeof window.getCurrentActiveOrderId === "function") {
+    activeOrder = String(window.getCurrentActiveOrderId() || "").trim();
+  }
+  var status = activeOrder ? "en_servicio" : "disponible";
+  if (typeof window.getTechLiveStatus === "function") {
+    var override = String(window.getTechLiveStatus() || "").trim();
+    if (override) status = override;
+  }
+  return {
+    status: status,
+    ordenActiva: activeOrder,
+  };
+}
+
+function shouldWriteLiveLocation(nowMs, lat, lng, context, forceWrite) {
+  if (forceWrite) return true;
+  if (!liveLocationLastWriteAt) return true;
+  var elapsed = nowMs - liveLocationLastWriteAt;
+  if (
+    context &&
+    (context.status !== liveLocationLastStatus ||
+      context.ordenActiva !== liveLocationLastOrder)
+  ) {
+    return elapsed >= 5000;
+  }
+  if (elapsed >= LIVE_LOCATION_MIN_INTERVAL_MS) return true;
+  if (!liveLocationLastCoords) return true;
+  var moved = geoDistanceMeters(
+    liveLocationLastCoords.lat,
+    liveLocationLastCoords.lng,
+    lat,
+    lng
+  );
+  if (
+    moved >= LIVE_LOCATION_MIN_DISTANCE_M &&
+    elapsed >= LIVE_LOCATION_FAST_MOVE_INTERVAL_MS
+  ) {
+    return true;
+  }
+  return false;
+}
+
+async function writeLiveLocationDoc(user, profile, position, forceWrite) {
+  if (!firebaseAvailable || !db || !user || !profile || profile.role !== "tecnico") {
+    return false;
+  }
+  var nowMs = Date.now();
+  var coords = position && position.coords ? position.coords : null;
+  var lat = coords ? toFixedNumber(coords.latitude, 6) : null;
+  var lng = coords ? toFixedNumber(coords.longitude, 6) : null;
+  var accuracy =
+    coords && typeof coords.accuracy === "number"
+      ? Math.round(coords.accuracy)
+      : null;
+  var context = liveContextFromUi();
+
+  if (
+    typeof lat !== "number" ||
+    typeof lng !== "number" ||
+    !shouldWriteLiveLocation(nowMs, lat, lng, context, !!forceWrite)
+  ) {
+    if (!forceWrite) return false;
+  }
+
+  var payload = {
+    uid: user.uid,
+    nombre: profile.name || user.displayName || user.email || "Técnico",
+    email: user.email || profile.email || "",
+    role: "tecnico",
+    timestamp: serverTimestamp(),
+    online: true,
+    status: context.status || "disponible",
+    ordenActiva: context.ordenActiva || "",
+  };
+  if (typeof lat === "number" && typeof lng === "number") {
+    payload.lat = lat;
+    payload.lng = lng;
+    payload.accuracy = typeof accuracy === "number" ? accuracy : 0;
+  }
+
+  await setDoc(doc(db, "live_locations", user.uid), payload, { merge: true });
+
+  liveLocationLastWriteAt = nowMs;
+  if (typeof lat === "number" && typeof lng === "number") {
+    liveLocationLastCoords = { lat: lat, lng: lng };
+  }
+  liveLocationLastStatus = payload.status;
+  liveLocationLastOrder = payload.ordenActiva;
+  liveLocationUiState.lastSync = new Date(nowMs).toISOString();
+  emitLiveLocationUiState({
+    active: true,
+    gps: "active",
+    connection: "Conectado",
+    error: "",
+    lastSync: liveLocationUiState.lastSync,
+  });
+  return true;
+}
+
+async function setLiveLocationOffline(reason) {
+  if (!firebaseAvailable || !db || !liveLocationTrackingUid) return;
+  try {
+    await setDoc(
+      doc(db, "live_locations", liveLocationTrackingUid),
+      {
+        online: false,
+        status: "offline",
+        ordenActiva: "",
+        timestamp: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn("No se pudo marcar técnico offline:", err);
+  } finally {
+    emitLiveLocationUiState({
+      active: false,
+      gps: "inactive",
+      connection: "Desconectado",
+      error: reason || "",
+    });
+  }
+}
+
+function stopLiveLocationTracking() {
+  if (liveLocationWatcherId != null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(liveLocationWatcherId);
+  }
+  if (liveLocationPulseTimer) {
+    clearInterval(liveLocationPulseTimer);
+  }
+  liveLocationWatcherId = null;
+  liveLocationPulseTimer = null;
+  liveLocationLatestPosition = null;
+  liveLocationLastWriteAt = 0;
+  liveLocationLastCoords = null;
+  liveLocationLastStatus = "";
+  liveLocationLastOrder = "";
+  liveLocationTrackingUid = "";
+}
+
+async function startLiveLocationTracking(user, profile) {
+  stopLiveLocationTracking();
+  if (!user || !profile || profile.role !== "tecnico") return;
+
+  liveLocationTrackingUid = user.uid;
+  emitLiveLocationUiState({
+    active: false,
+    gps: "inactive",
+    connection: "Solicitando permisos GPS...",
+    error: "",
+    lastSync: "",
+  });
+
+  if (!navigator.geolocation) {
+    emitLiveLocationUiState({
+      active: false,
+      gps: "unsupported",
+      connection: "GPS no soportado",
+      error: "Este dispositivo no soporta geolocalización.",
+    });
+    return;
+  }
+
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      var permission = await navigator.permissions.query({ name: "geolocation" });
+      if (permission && permission.state === "denied") {
+        emitLiveLocationUiState({
+          active: false,
+          gps: "denied",
+          connection: "Permiso denegado",
+          error: "Activa permisos de ubicación en el navegador.",
+        });
+      }
+    }
+  } catch (permErr) {
+    console.warn("No se pudo leer estado de permiso GPS:", permErr);
+  }
+
+  await writeLiveLocationDoc(user, profile, null, true);
+
+  liveLocationWatcherId = navigator.geolocation.watchPosition(
+    function (position) {
+      liveLocationLatestPosition = position;
+      writeLiveLocationDoc(user, profile, position, false).catch(function (err) {
+        console.error("Error guardando ubicación live:", err);
+        emitLiveLocationUiState({
+          connection: "Error al sincronizar",
+          error: "No se pudo guardar la ubicación en Firestore.",
+        });
+      });
+    },
+    function (err) {
+      var msg = "Error de GPS";
+      if (err && err.code === 1) msg = "Permiso denegado";
+      if (err && err.code === 2) msg = "Señal GPS no disponible";
+      if (err && err.code === 3) msg = "Tiempo de espera agotado";
+      emitLiveLocationUiState({
+        active: false,
+        gps: "error",
+        connection: msg,
+        error: msg,
+      });
+      console.warn("watchPosition error:", err);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 15000,
+      timeout: 20000,
+    }
+  );
+
+  liveLocationPulseTimer = setInterval(function () {
+    var authUser = auth.currentUser;
+    if (!authUser || authUser.uid !== user.uid) return;
+    writeLiveLocationDoc(authUser, profile, liveLocationLatestPosition, false).catch(
+      function (err) {
+        console.warn("Pulse GPS live falló:", err);
+      }
+    );
+  }, LIVE_LOCATION_PULSE_MS);
 }
 
 function setupEvents() {
@@ -309,7 +617,31 @@ window.canAccessPage = function canAccessPage(page) {
 
 window.logoutUser = async function logoutUser() {
   if (!firebaseAvailable) return;
-  await signOut(auth);
+  try {
+    if (
+      auth.currentUser &&
+      currentUserProfile &&
+      currentUserProfile.role === "tecnico"
+    ) {
+      await setLiveLocationOffline("Cerraste sesión");
+    }
+  } catch (err) {
+    console.warn("No se pudo sincronizar estado offline en logout:", err);
+  } finally {
+    stopLiveLocationTracking();
+    await signOut(auth);
+  }
+};
+
+window.notifyLiveTrackingContextChanged = async function notifyLiveTrackingContextChanged() {
+  if (!firebaseAvailable || !auth.currentUser) return false;
+  if (!currentUserProfile || currentUserProfile.role !== "tecnico") return false;
+  return writeLiveLocationDoc(
+    auth.currentUser,
+    currentUserProfile,
+    liveLocationLatestPosition,
+    true
+  );
 };
 
 window.saveReportToFirestore = async function saveReportToFirestore(reportData) {

@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "administrador";
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /live_locations/{uid} {
+      // Admin puede monitorear técnicos.
+      allow read: if isAdmin() || isOwner(uid);
+
+      // Cada técnico solo crea/actualiza su propio documento.
+      allow create, update: if isOwner(uid)
+        && request.resource.data.uid == request.auth.uid;
+
+      // Admin o dueño pueden borrar su documento.
+      allow delete: if isAdmin() || isOwner(uid);
+    }
+  }
+}
