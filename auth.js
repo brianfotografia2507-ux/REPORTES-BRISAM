@@ -15,6 +15,7 @@ import {
   collection,
   doc,
   getDoc,
+  onSnapshot,
   setDoc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
@@ -31,7 +32,7 @@ var roleLandingPage = {
 
 var roleAllowedPages = {
   tecnico: ["tech", "report"],
-  administrador: ["dashboard", "orders", "clients", "branches", "technicians", "equipment", "checklists", "report"]
+  administrador: ["dashboard", "map", "orders", "clients", "branches", "technicians", "equipment", "checklists", "report"]
 };
 
 var currentRole = null;
@@ -67,6 +68,7 @@ var LIVE_LOCATION_MIN_INTERVAL_MS = 60000;
 var LIVE_LOCATION_MIN_DISTANCE_M = 35;
 var LIVE_LOCATION_FAST_MOVE_INTERVAL_MS = 15000;
 var LIVE_LOCATION_PULSE_MS = 20000;
+var adminLiveLocationsUnsubscribe = null;
 
 function withTimeout(promise, ms, label) {
   return new Promise(function (resolve, reject) {
@@ -255,6 +257,7 @@ async function loadUserState(user) {
     currentRole = null;
     currentUserProfile = null;
     stopLiveLocationTracking();
+    stopAdminLiveLocationsSubscription();
     emitLiveLocationUiState({
       active: false,
       connection: "Sin sesión",
@@ -280,11 +283,13 @@ async function loadUserState(user) {
     showApp(true);
     goRoleLanding(role);
     if (role === "tecnico") {
+      stopAdminLiveLocationsSubscription();
       startLiveLocationTracking(user, profile || {}).catch(function (err) {
         console.warn("No se pudo iniciar tracking GPS live:", err);
       });
     } else {
       stopLiveLocationTracking();
+      stopAdminLiveLocationsSubscription();
       emitLiveLocationUiState({
         active: false,
         connection: "No aplica para administrador",
@@ -295,6 +300,7 @@ async function loadUserState(user) {
     }
   } catch (err) {
     stopLiveLocationTracking();
+    stopAdminLiveLocationsSubscription();
     await signOut(auth);
     setAuthMessage("No fue posible cargar el perfil del usuario.", "error");
   }
@@ -482,6 +488,17 @@ function stopLiveLocationTracking() {
   liveLocationTrackingUid = "";
 }
 
+function stopAdminLiveLocationsSubscription() {
+  if (adminLiveLocationsUnsubscribe) {
+    try {
+      adminLiveLocationsUnsubscribe();
+    } catch (err) {
+      console.warn("Error cerrando suscripción live_locations:", err);
+    }
+    adminLiveLocationsUnsubscribe = null;
+  }
+}
+
 async function startLiveLocationTracking(user, profile) {
   stopLiveLocationTracking();
   if (!user || !profile || profile.role !== "tecnico") return;
@@ -629,6 +646,7 @@ window.logoutUser = async function logoutUser() {
     console.warn("No se pudo sincronizar estado offline en logout:", err);
   } finally {
     stopLiveLocationTracking();
+    stopAdminLiveLocationsSubscription();
     await signOut(auth);
   }
 };
@@ -642,6 +660,41 @@ window.notifyLiveTrackingContextChanged = async function notifyLiveTrackingConte
     liveLocationLatestPosition,
     true
   );
+};
+
+window.stopAdminLiveLocationsSubscription = function stopAdminLiveLocationsSubscriptionPublic() {
+  stopAdminLiveLocationsSubscription();
+};
+
+window.subscribeAdminLiveLocations = function subscribeAdminLiveLocations(onChange, onError) {
+  if (!firebaseAvailable || !db || typeof onChange !== "function") {
+    return function noopUnsubscribe() {};
+  }
+  var user = auth.currentUser;
+  if (!user || !currentUserProfile || currentUserProfile.role !== "administrador") {
+    console.warn("subscribeAdminLiveLocations: acceso denegado (solo admin).");
+    return function noopUnsubscribe() {};
+  }
+
+  stopAdminLiveLocationsSubscription();
+  adminLiveLocationsUnsubscribe = onSnapshot(
+    collection(db, "live_locations"),
+    function (snap) {
+      var docs = [];
+      snap.forEach(function (item) {
+        docs.push({ id: item.id, data: item.data() || {} });
+      });
+      onChange(docs);
+    },
+    function (err) {
+      console.error("Error en live_locations onSnapshot:", err);
+      if (typeof onError === "function") onError(err);
+    }
+  );
+
+  return function unsubscribeLiveLocations() {
+    stopAdminLiveLocationsSubscription();
+  };
 };
 
 window.saveReportToFirestore = async function saveReportToFirestore(reportData) {

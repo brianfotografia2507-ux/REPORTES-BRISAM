@@ -7,6 +7,7 @@
 <link rel="icon" type="image/png" href="./assets/favicon.png">
 <link rel="apple-touch-icon" href="./assets/favicon.png">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
 :root{
   --bg:#0a0f1a;--surface:#111827;--surface2:#1a2235;--surface3:#1e2c44;
@@ -58,6 +59,34 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 /* ── PAGES ── */
 .page{display:none;padding:24px;flex:1;}
 .page.on{display:block;}
+
+/* ── LIVE MAP ADMIN ── */
+#pg-map{padding:16px;}
+.map-shell{display:grid;grid-template-columns:320px 1fr;gap:12px;min-height:calc(100vh - 150px);}
+.map-side{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;overflow:auto;display:flex;flex-direction:column;}
+.map-side-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;}
+.map-kpis{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.map-kpi{font-size:11px;padding:4px 9px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);color:var(--muted2);}
+.map-kpi strong{color:var(--text);}
+.map-list{display:flex;flex-direction:column;gap:8px;}
+.map-tech-item{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;cursor:pointer;transition:all .15s;}
+.map-tech-item:hover{border-color:var(--accent);}
+.map-tech-item .name{font-size:13px;font-weight:600;margin-bottom:4px;}
+.map-tech-item .meta{font-size:11px;color:var(--muted2);line-height:1.45;}
+.map-status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+.map-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative;}
+#squad-map{width:100%;height:100%;min-height:520px;}
+.map-overlay-msg{position:absolute;top:12px;left:12px;z-index:500;background:rgba(10,15,26,.82);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;max-width:360px;}
+.leaflet-container{background:#0d1524;color:var(--text);}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#0f1a2e;color:#eaf1ff;border:1px solid #233453;}
+.leaflet-popup-content{font-size:12px;line-height:1.45;margin:10px 12px;}
+.leaflet-tooltip.map-tip{background:#101b30;color:#edf2ff;border:1px solid #314566;border-radius:8px;padding:6px 8px;box-shadow:none;}
+.map-marker-dot{width:14px;height:14px;border-radius:50%;border:2px solid #0b111d;box-shadow:0 0 0 2px rgba(10,15,26,.65);}
+.map-marker-green{background:#22c55e;}
+.map-marker-yellow{background:#eab308;}
+.map-marker-blue{background:#3b82f6;}
+.map-marker-orange{background:#f97316;}
+.map-marker-red{background:#ef4444;}
 
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .18s;font-family:'DM Sans',sans-serif;}
@@ -316,6 +345,9 @@ canvas.sig.signed{border-color:var(--green);}
   .add-section-btn{font-size:11px;padding:6px 10px;}
   .auth-card{padding:16px;}
   .dash-filters .fs,.dash-filters .fi{width:100%;}
+  .map-shell{grid-template-columns:1fr;min-height:auto;}
+  .map-side{max-height:280px;}
+  #squad-map{min-height:420px;}
 }
 </style>
 </head>
@@ -383,6 +415,7 @@ canvas.sig.signed{border-color:var(--green);}
   <nav class="s-nav">
     <div class="s-section">Principal</div>
     <button class="s-item on"  id="ni-dashboard"   data-role="administrador" onclick="goTo('dashboard',this)"><span class="ico">📊</span>Dashboard</button>
+    <button class="s-item"     id="ni-map"         data-role="administrador" onclick="goTo('map',this)"><span class="ico">📍</span>Mapa de Cuadrillas</button>
     <button class="s-item"     id="ni-orders"      data-role="administrador" onclick="goTo('orders',this)"><span class="ico">📋</span>Órdenes<span class="s-badge" id="nb-pend">0</span></button>
     <button class="s-item"     id="ni-tech"        data-role="tecnico" onclick="goTo('tech',this)"><span class="ico">🔧</span>Vista Técnico</button>
     <button class="s-item"     id="ni-report"      data-role="tecnico,administrador" onclick="goTo('report',this)"><span class="ico">📄</span>Reportes</button>
@@ -503,6 +536,29 @@ canvas.sig.signed{border-color:var(--green);}
   <!-- REPORT -->
   <div class="page" id="pg-report">
     <div id="rpt-content"><div class="empty"><div class="empty-ico">📋</div>Cierra una orden para generar el reporte</div></div>
+  </div>
+
+  <!-- MAP -->
+  <div class="page" id="pg-map">
+    <div class="map-shell">
+      <aside class="map-side">
+        <div class="map-side-head">
+          <div class="sec" style="margin:0;">Cuadrillas en vivo</div>
+        </div>
+        <div class="map-kpis">
+          <span class="map-kpi">Total: <strong id="map-kpi-total">0</strong></span>
+          <span class="map-kpi">Online: <strong id="map-kpi-online">0</strong></span>
+          <span class="map-kpi">Offline: <strong id="map-kpi-offline">0</strong></span>
+        </div>
+        <div class="map-list" id="map-tech-list">
+          <div class="empty" style="padding:20px 10px;"><div class="empty-ico">📡</div>Esperando ubicaciones...</div>
+        </div>
+      </aside>
+      <section class="map-wrap">
+        <div id="squad-map"></div>
+        <div class="map-overlay-msg" id="map-overlay-msg">Cargando mapa en tiempo real...</div>
+      </section>
+    </div>
   </div>
 
   <!-- CLIENTS -->
@@ -667,6 +723,7 @@ canvas.sig.signed{border-color:var(--green);}
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 // ══════════════ DATA ══════════════
 var DB = {
@@ -803,6 +860,263 @@ function notifyLiveTrackingContext(){
   Promise.resolve(window.notifyLiveTrackingContextChanged()).catch(function(err){
     console.warn('No se pudo sincronizar contexto live:',err);
   });
+}
+
+var APP_ACTIVE_PAGE='dashboard';
+var MAP_STATE={
+  map:null,
+  markers:{},
+  locations:{},
+  unsubscribe:null,
+  hasFitted:false
+};
+
+function mapMs(value){
+  if(!value) return 0;
+  if(typeof value.toDate==='function') return value.toDate().getTime();
+  if(typeof value.seconds==='number') return value.seconds*1000;
+  var n=Date.parse(value);
+  return isNaN(n)?0:n;
+}
+
+function mapEscapeHtml(value){
+  return String(value==null?'':value)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function mapStatusMeta(status){
+  var map={
+    disponible:{label:'Disponible',className:'map-marker-green',dot:'🟢'},
+    en_camino:{label:'En camino',className:'map-marker-yellow',dot:'🟡'},
+    trabajando:{label:'Trabajando',className:'map-marker-blue',dot:'🔵'},
+    pausado:{label:'Pausado',className:'map-marker-orange',dot:'🟠'},
+    offline:{label:'Offline',className:'map-marker-red',dot:'🔴'}
+  };
+  return map[status]||map.disponible;
+}
+
+function getMapStatus(loc){
+  var raw=String(loc&&loc.status?loc.status:'').toLowerCase();
+  var isOffline=!loc || loc.online===false || ((Date.now()-mapMs(loc.timestamp))>300000);
+  if(isOffline) return 'offline';
+  if(raw.indexOf('camino')!==-1) return 'en_camino';
+  if(raw.indexOf('paus')!==-1) return 'pausado';
+  if(raw.indexOf('trabaj')!==-1 || raw.indexOf('servicio')!==-1 || raw==='en_servicio') return 'trabajando';
+  if(raw.indexOf('dispon')!==-1) return 'disponible';
+  return loc.ordenActiva?'trabajando':'disponible';
+}
+
+function formatMapSync(value){
+  var ms=mapMs(value);
+  if(!ms) return 'Sin sincronización';
+  return new Date(ms).toLocaleString('es-MX',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function mapOverlay(msg,isError){
+  var el=document.getElementById('map-overlay-msg');
+  if(!el) return;
+  el.textContent=msg||'';
+  el.style.display=msg?'block':'none';
+  el.style.borderColor=isError?'rgba(239,68,68,.45)':'var(--border)';
+}
+
+function ensureAdminMapInstance(){
+  if(MAP_STATE.map) return true;
+  var target=document.getElementById('squad-map');
+  if(!target) return false;
+  if(typeof window.L==='undefined'){
+    mapOverlay('Leaflet no está disponible en este momento.',true);
+    return false;
+  }
+  MAP_STATE.map=L.map(target,{zoomControl:true,preferCanvas:true,minZoom:3});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    attribution:'&copy; OpenStreetMap &copy; CARTO',
+    subdomains:'abcd',
+    maxZoom:20
+  }).addTo(MAP_STATE.map);
+  MAP_STATE.map.setView([25.6866,-100.3161],11);
+  setTimeout(function(){ if(MAP_STATE.map) MAP_STATE.map.invalidateSize(); },140);
+  return true;
+}
+
+function buildMapPopup(loc){
+  var status=getMapStatus(loc);
+  var meta=mapStatusMeta(status);
+  return '<div>'
+    +'<div style="font-size:13px;font-weight:700;margin-bottom:4px;">'+mapEscapeHtml(loc.nombre||loc.email||loc.uid||'Técnico')+'</div>'
+    +'<div><strong>Estado:</strong> '+meta.dot+' '+meta.label+'</div>'
+    +'<div><strong>Orden activa:</strong> '+mapEscapeHtml(loc.ordenActiva||'Sin orden')+'</div>'
+    +'<div><strong>Última actualización:</strong> '+mapEscapeHtml(formatMapSync(loc.timestamp))+'</div>'
+    +'<div><strong>Precisión:</strong> '+(typeof loc.accuracy==='number'?loc.accuracy+' m':'—')+'</div>'
+    +'</div>';
+}
+
+function buildMapTooltip(loc){
+  var status=getMapStatus(loc);
+  var meta=mapStatusMeta(status);
+  return '<div style="min-width:190px;">'
+    +'<div style="font-weight:700;margin-bottom:2px;">'+mapEscapeHtml(loc.nombre||loc.email||'Técnico')+'</div>'
+    +'<div>'+meta.dot+' '+meta.label+'</div>'
+    +'<div>Orden: '+mapEscapeHtml(loc.ordenActiva||'Sin orden')+'</div>'
+    +'<div>Sync: '+mapEscapeHtml(formatMapSync(loc.timestamp))+'</div>'
+    +'<div>Precisión: '+(typeof loc.accuracy==='number'?loc.accuracy+' m':'—')+'</div>'
+    +'</div>';
+}
+
+function buildMarkerIcon(status){
+  var meta=mapStatusMeta(status);
+  return L.divIcon({
+    className:'',
+    html:'<div class="map-marker-dot '+meta.className+'"></div>',
+    iconSize:[14,14],
+    iconAnchor:[7,7]
+  });
+}
+
+function upsertTechMarker(loc){
+  if(!MAP_STATE.map) return;
+  if(typeof loc.lat!=='number' || typeof loc.lng!=='number') return;
+  var uid=loc.uid||loc.id;
+  if(!uid) return;
+  var status=getMapStatus(loc);
+  var marker=MAP_STATE.markers[uid];
+  if(!marker){
+    marker=L.marker([loc.lat,loc.lng],{icon:buildMarkerIcon(status)});
+    marker.addTo(MAP_STATE.map);
+    marker.on('click',function(){ MAP_STATE.map.panTo(marker.getLatLng()); });
+    MAP_STATE.markers[uid]=marker;
+  }else{
+    marker.setLatLng([loc.lat,loc.lng]);
+    marker.setIcon(buildMarkerIcon(status));
+  }
+  marker.bindTooltip(buildMapTooltip(loc),{direction:'top',offset:[0,-8],className:'map-tip'});
+  marker.bindPopup(buildMapPopup(loc));
+}
+
+function clearRemovedMarkers(activeByUid){
+  Object.keys(MAP_STATE.markers).forEach(function(uid){
+    if(activeByUid[uid]) return;
+    MAP_STATE.map.removeLayer(MAP_STATE.markers[uid]);
+    delete MAP_STATE.markers[uid];
+  });
+}
+
+function renderMapSidebar(locations){
+  var listEl=document.getElementById('map-tech-list');
+  if(!listEl) return;
+  var sorted=locations.slice().sort(function(a,b){
+    return mapMs(b.timestamp)-mapMs(a.timestamp);
+  });
+  if(!sorted.length){
+    listEl.innerHTML='<div class="empty" style="padding:20px 10px;"><div class="empty-ico">📡</div>Sin ubicaciones disponibles</div>';
+    return;
+  }
+  listEl.innerHTML=sorted.map(function(loc){
+    var status=getMapStatus(loc);
+    var meta=mapStatusMeta(status);
+    var uid=loc.uid||loc.id||'';
+    return '<div class="map-tech-item" data-map-uid="'+mapEscapeHtml(uid)+'">'
+      +'<div class="name"><span class="map-status-dot" style="background:'+(status==='disponible'?'#22c55e':status==='en_camino'?'#eab308':status==='trabajando'?'#3b82f6':status==='pausado'?'#f97316':'#ef4444')+';"></span>'+mapEscapeHtml(loc.nombre||loc.email||uid||'Técnico')+'</div>'
+      +'<div class="meta">'+meta.dot+' '+meta.label+'</div>'
+      +'<div class="meta">Orden: '+mapEscapeHtml(loc.ordenActiva||'Sin orden activa')+'</div>'
+      +'<div class="meta">Sync: '+mapEscapeHtml(formatMapSync(loc.timestamp))+'</div>'
+      +'</div>';
+  }).join('');
+  Array.prototype.slice.call(listEl.querySelectorAll('[data-map-uid]')).forEach(function(el){
+    el.onclick=function(){
+      var uid=el.getAttribute('data-map-uid');
+      var marker=MAP_STATE.markers[uid];
+      if(marker && MAP_STATE.map){
+        MAP_STATE.map.setView(marker.getLatLng(),16,{animate:true});
+        marker.openPopup();
+      }
+    };
+  });
+}
+
+function renderMapKpis(locations){
+  var total=locations.length;
+  var online=locations.filter(function(loc){ return getMapStatus(loc)!=='offline'; }).length;
+  var offline=total-online;
+  var totalEl=document.getElementById('map-kpi-total');
+  var onlineEl=document.getElementById('map-kpi-online');
+  var offlineEl=document.getElementById('map-kpi-offline');
+  if(totalEl) totalEl.textContent=String(total);
+  if(onlineEl) onlineEl.textContent=String(online);
+  if(offlineEl) offlineEl.textContent=String(offline);
+}
+
+function applyMapLiveLocations(docs){
+  var activeByUid={};
+  var locs=[];
+  MAP_STATE.locations={};
+  docs.forEach(function(item){
+    var data=item&&item.data?Object.assign({},item.data):{};
+    var uid=String(data.uid||item.id||'').trim();
+    if(!uid) return;
+    data.uid=uid;
+    if(typeof data.lat==='number' && typeof data.lng==='number'){
+      upsertTechMarker(data);
+      activeByUid[uid]=true;
+    }
+    MAP_STATE.locations[uid]=data;
+    locs.push(data);
+  });
+  clearRemovedMarkers(activeByUid);
+  renderMapSidebar(locs);
+  renderMapKpis(locs);
+
+  if(!MAP_STATE.hasFitted){
+    var valid=locs.filter(function(loc){ return typeof loc.lat==='number' && typeof loc.lng==='number'; });
+    if(valid.length===1 && MAP_STATE.map){
+      MAP_STATE.map.setView([valid[0].lat,valid[0].lng],14);
+      MAP_STATE.hasFitted=true;
+    }
+    if(valid.length>1 && MAP_STATE.map){
+      var bounds=L.latLngBounds(valid.map(function(loc){ return [loc.lat,loc.lng]; }));
+      MAP_STATE.map.fitBounds(bounds,{padding:[32,32]});
+      MAP_STATE.hasFitted=true;
+    }
+  }
+  mapOverlay('');
+}
+
+function stopMapLiveFeed(){
+  if(MAP_STATE.unsubscribe){
+    try{ MAP_STATE.unsubscribe(); }catch(_err){}
+    MAP_STATE.unsubscribe=null;
+  }
+  if(typeof window.stopAdminLiveLocationsSubscription==='function'){
+    window.stopAdminLiveLocationsSubscription();
+  }
+}
+
+function startMapLiveFeed(){
+  if(MAP_STATE.unsubscribe){
+    try{ MAP_STATE.unsubscribe(); }catch(_err){}
+    MAP_STATE.unsubscribe=null;
+  }
+  if(typeof window.subscribeAdminLiveLocations!=='function'){
+    mapOverlay('Módulo Firebase live no disponible.',true);
+    return;
+  }
+  mapOverlay('Sincronizando ubicaciones live...');
+  MAP_STATE.unsubscribe=window.subscribeAdminLiveLocations(function(docs){
+    applyMapLiveLocations(Array.isArray(docs)?docs:[]);
+  },function(err){
+    console.error('Error en feed live map:',err);
+    mapOverlay('No se pudieron cargar ubicaciones en tiempo real.',true);
+  });
+}
+
+function renderMapPage(){
+  if(!ensureAdminMapInstance()) return;
+  startMapLiveFeed();
+  setTimeout(function(){ if(MAP_STATE.map) MAP_STATE.map.invalidateSize(); },120);
 }
 
 // ══════════════ HELPERS ══════════════
@@ -965,18 +1279,22 @@ function openSidebar(){ document.getElementById('sidebar').classList.add('open')
 function closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('sb-backdrop').classList.remove('on'); document.body.style.overflow=''; }
 
 // ══════════════ NAV ══════════════
-var PAGE_TITLES={dashboard:'Dashboard',orders:'Órdenes de Trabajo',tech:'Vista Técnico',report:'Reportes',clients:'Clientes',branches:'Sucursales',technicians:'Técnicos',equipment:'Equipos',checklists:'Check-lists'};
+var PAGE_TITLES={dashboard:'Dashboard',map:'Mapa de Cuadrillas',orders:'Órdenes de Trabajo',tech:'Vista Técnico',report:'Reportes',clients:'Clientes',branches:'Sucursales',technicians:'Técnicos',equipment:'Equipos',checklists:'Check-lists'};
 
 function goTo(page,el){
   if(typeof window.canAccessPage==='function' && !window.canAccessPage(page)){
     toast('⛔ No tienes permisos para esta sección');
     return;
   }
+  if(APP_ACTIVE_PAGE==='map' && page!=='map'){
+    stopMapLiveFeed();
+  }
   closeSidebar();
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('on'); });
   document.querySelectorAll('.s-item').forEach(function(i){ i.classList.remove('on'); });
   document.getElementById('pg-'+page).classList.add('on');
   if(el) el.classList.add('on');
+  APP_ACTIVE_PAGE=page;
   document.getElementById('pg-title').textContent=PAGE_TITLES[page]||page;
   var a='';
   if(page==='orders')      a='<button class="btn btn-primary" onclick="openOrderM()">＋ Nueva Orden</button>';
@@ -986,7 +1304,7 @@ function goTo(page,el){
   if(page==='equipment')   a='<button class="btn btn-primary" onclick="openEquipM()">＋ Nuevo Equipo</button>';
   if(page==='checklists')  a='<button class="btn btn-primary" onclick="openClM()">＋ Nuevo Check-list</button>';
   document.getElementById('pg-actions').innerHTML=a;
-  var renders={dashboard:renderDashboard,orders:renderOrders,clients:renderClients,branches:renderBranches,technicians:renderTechs,equipment:renderEquipment,checklists:renderChecklists,tech:renderTechView};
+  var renders={dashboard:renderDashboard,map:renderMapPage,orders:renderOrders,clients:renderClients,branches:renderBranches,technicians:renderTechs,equipment:renderEquipment,checklists:renderChecklists,tech:renderTechView};
   if(renders[page]) renders[page]();
   if(page==='report' && typeof window.loadReportsIntoPanel==='function'){
     window.loadReportsIntoPanel();
