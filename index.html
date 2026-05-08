@@ -418,6 +418,7 @@ canvas.sig.signed{border-color:var(--green);}
     <button class="s-item"     id="ni-map"         data-role="administrador" onclick="goTo('map',this)"><span class="ico">📍</span>Mapa de Cuadrillas</button>
     <button class="s-item"     id="ni-orders"      data-role="administrador" onclick="goTo('orders',this)"><span class="ico">📋</span>Órdenes<span class="s-badge" id="nb-pend">0</span></button>
     <button class="s-item"     id="ni-tech"        data-role="tecnico" onclick="goTo('tech',this)"><span class="ico">🔧</span>Vista Técnico</button>
+    <button class="s-item"     id="ni-tech-checklists" data-role="tecnico" onclick="goTo('tech-checklists',this)"><span class="ico">🧾</span>Checklists</button>
     <button class="s-item"     id="ni-report"      data-role="tecnico,administrador" onclick="goTo('report',this)"><span class="ico">📄</span>Reportes</button>
     <div class="s-section">Catálogos</div>
     <button class="s-item"     id="ni-clients"      data-role="administrador" onclick="goTo('clients',this)"><span class="ico">🏢</span>Clientes</button>
@@ -531,6 +532,12 @@ canvas.sig.signed{border-color:var(--green);}
       </div>
       <button class="btn btn-success" style="width:100%;justify-content:center;padding:13px;font-size:14px;" onclick="closeOrder()">✓ Cerrar Orden y Generar Reporte</button>
     </div>
+  </div>
+
+  <!-- TECH CHECKLISTS -->
+  <div class="page" id="pg-tech-checklists">
+    <div class="sec">Checklists publicados</div>
+    <div class="cards" id="tech-checklist-grid"></div>
   </div>
 
   <!-- REPORT -->
@@ -697,6 +704,13 @@ canvas.sig.signed{border-color:var(--green);}
       <div class="fg"><label class="fl">Tipo de servicio</label>
         <select class="fs" id="cl-type"><option>Mantenimiento Preventivo</option><option>Mantenimiento Correctivo</option><option>Inspección</option><option>General</option></select></div>
     </div>
+    <div class="fg" style="margin-bottom:14px;">
+      <label class="fl">Publicado para técnicos</label>
+      <select class="fs" id="cl-published">
+        <option value="false">No publicado</option>
+        <option value="true">Publicado</option>
+      </select>
+    </div>
 
     <!-- Builder area -->
     <div class="sec">Estructura del check-list</div>
@@ -804,6 +818,8 @@ var DB = {
 };
 
 var curOrderId=null, chkState={}, sigDraw=false, sigSigned=false;
+var currentWorkMode='order';
+var currentFreeChecklistId='';
 var tmpSections=[];
 window.dashboardReportsCache=Array.isArray(window.dashboardReportsCache)?window.dashboardReportsCache:[];
 var techLiveGpsState={
@@ -861,6 +877,45 @@ function notifyLiveTrackingContext(){
     console.warn('No se pudo sincronizar contexto live:',err);
   });
 }
+
+function checklistToMs(value){
+  if(!value) return 0;
+  if(typeof value.toDate==='function') return value.toDate().getTime();
+  if(typeof value.seconds==='number') return value.seconds*1000;
+  var n=Date.parse(value);
+  return isNaN(n)?0:n;
+}
+
+function formatChecklistDate(value){
+  var ms=checklistToMs(value);
+  if(!ms) return 'Sin fecha';
+  return new Date(ms).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
+}
+
+function normalizeChecklistDoc(cl){
+  var data=cl||{};
+  return {
+    id:String(data.id||uid()),
+    name:String(data.name||'Checklist').trim(),
+    type:String(data.type||'General').trim()||'General',
+    published:data.published===true,
+    sections:Array.isArray(data.sections)?JSON.parse(JSON.stringify(data.sections)):[],
+    createdAt:data.createdAt||null,
+    updatedAt:data.updatedAt||null,
+    createdBy:data.createdBy||''
+  };
+}
+
+window.setFirestoreChecklistsData=function setFirestoreChecklistsData(items){
+  var list=Array.isArray(items)?items.map(normalizeChecklistDoc):[];
+  if(!list.length){
+    DB.checklists=[];
+  }else{
+    DB.checklists=list;
+  }
+  renderChecklists();
+  renderTechChecklistPage();
+};
 
 var APP_ACTIVE_PAGE='dashboard';
 var MAP_STATE={
@@ -1279,7 +1334,7 @@ function openSidebar(){ document.getElementById('sidebar').classList.add('open')
 function closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('sb-backdrop').classList.remove('on'); document.body.style.overflow=''; }
 
 // ══════════════ NAV ══════════════
-var PAGE_TITLES={dashboard:'Dashboard',map:'Mapa de Cuadrillas',orders:'Órdenes de Trabajo',tech:'Vista Técnico',report:'Reportes',clients:'Clientes',branches:'Sucursales',technicians:'Técnicos',equipment:'Equipos',checklists:'Check-lists'};
+var PAGE_TITLES={dashboard:'Dashboard',map:'Mapa de Cuadrillas',orders:'Órdenes de Trabajo',tech:'Vista Técnico',report:'Reportes',clients:'Clientes',branches:'Sucursales',technicians:'Técnicos',equipment:'Equipos',checklists:'Check-lists','tech-checklists':'Checklists técnicos'};
 
 function goTo(page,el){
   if(typeof window.canAccessPage==='function' && !window.canAccessPage(page)){
@@ -1304,7 +1359,7 @@ function goTo(page,el){
   if(page==='equipment')   a='<button class="btn btn-primary" onclick="openEquipM()">＋ Nuevo Equipo</button>';
   if(page==='checklists')  a='<button class="btn btn-primary" onclick="openClM()">＋ Nuevo Check-list</button>';
   document.getElementById('pg-actions').innerHTML=a;
-  var renders={dashboard:renderDashboard,map:renderMapPage,orders:renderOrders,clients:renderClients,branches:renderBranches,technicians:renderTechs,equipment:renderEquipment,checklists:renderChecklists,tech:renderTechView};
+  var renders={dashboard:renderDashboard,map:renderMapPage,orders:renderOrders,clients:renderClients,branches:renderBranches,technicians:renderTechs,equipment:renderEquipment,checklists:renderChecklists,tech:renderTechView,'tech-checklists':renderTechChecklistPage};
   if(renders[page]) renders[page]();
   if(page==='report' && typeof window.loadReportsIntoPanel==='function'){
     window.loadReportsIntoPanel();
@@ -1443,14 +1498,15 @@ function delEquip(id){ confirm_('¿Eliminar este equipo?',function(){ DB.equipme
 
 // ══════════════ CHECKLIST BUILDER ══════════════
 function renderChecklists(){
-  var html=DB.checklists.map(function(cl){
+  var html=DB.checklists.map(function(rawCl){
+    var cl=normalizeChecklistDoc(rawCl);
     var totalItems=0;
     cl.sections.forEach(function(s){ if(s.type==='checklist') totalItems+=s.items.length; });
     var secLabels=cl.sections.map(function(s){
       var icons={checklist:'☑️',fields:'📝',textarea:'💬'};
       return'<span class="chip">'+(icons[s.type]||'')+'  '+s.title+'</span>';
     }).join('');
-    return'<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(167,139,250,.1);">✅</div><div><div class="card-title">'+cl.name+'</div><div class="card-sub">'+cl.type+'</div></div></div><div class="card-acts"><button class="btn btn-ghost btn-sm btn-icon" onclick="openClM(\''+cl.id+'\')">✏️</button><button class="btn btn-danger btn-sm btn-icon" onclick="delCl(\''+cl.id+'\')">🗑️</button></div></div><div style="font-size:12px;color:var(--muted);margin-bottom:8px;">'+cl.sections.length+' secciones · '+totalItems+' tareas</div><div style="display:flex;flex-wrap:wrap;gap:5px;">'+secLabels+'</div></div>';
+    return'<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(167,139,250,.1);">✅</div><div><div class="card-title">'+cl.name+'</div><div class="card-sub">'+cl.type+' · '+formatChecklistDate(cl.updatedAt||cl.createdAt)+'</div></div></div><div class="card-acts"><button class="btn btn-ghost btn-sm btn-icon" onclick="openClM(\''+cl.id+'\')">✏️</button><button class="btn btn-danger btn-sm btn-icon" onclick="delCl(\''+cl.id+'\')">🗑️</button></div></div><div style="font-size:12px;color:var(--muted);margin-bottom:8px;">'+cl.sections.length+' secciones · '+totalItems+' tareas</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">'+secLabels+'</div><div class="card-meta"><span class="badge '+(cl.published?'b-act':'b-ina')+'">'+(cl.published?'Publicado':'No publicado')+'</span><button class="btn btn-ghost btn-sm" onclick="toggleChecklistPublished(\''+cl.id+'\')">'+(cl.published?'Despublicar':'Publicar')+'</button></div></div>';
   }).join('');
   html+='<div class="card card-dashed" onclick="openClM()"><div style="font-size:28px;color:var(--muted);">＋</div><div style="font-size:13px;color:var(--muted);">Nuevo check-list</div></div>';
   document.getElementById('grid-checklists').innerHTML=html;
@@ -1465,10 +1521,12 @@ function openClM(id){
     if(cl){
       document.getElementById('cl-name').value=cl.name;
       document.getElementById('cl-type').value=cl.type;
+      document.getElementById('cl-published').value=cl.published?'true':'false';
       tmpSections=JSON.parse(JSON.stringify(cl.sections));
     }
   } else {
     document.getElementById('cl-name').value='';
+    document.getElementById('cl-published').value='false';
     tmpSections=[];
   }
   renderBuilder();
@@ -1577,18 +1635,133 @@ function addField(si){
 }
 function removeField(si,fi){ tmpSections[si].fields.splice(fi,1); renderBuilder(); }
 
-function saveCl(){
+async function saveCl(){
   var eid=document.getElementById('cl-eid').value;
-  var data={name:document.getElementById('cl-name').value.trim(),type:document.getElementById('cl-type').value,sections:JSON.parse(JSON.stringify(tmpSections))};
+  var data={
+    id:eid||'',
+    name:document.getElementById('cl-name').value.trim(),
+    type:document.getElementById('cl-type').value,
+    published:document.getElementById('cl-published').value==='true',
+    sections:JSON.parse(JSON.stringify(tmpSections))
+  };
   if(!data.name){toast('⚠️ El nombre es requerido');return;}
   if(!data.sections.length){toast('⚠️ Agrega al menos una sección');return;}
-  if(eid){for(var i=0;i<DB.checklists.length;i++)if(DB.checklists[i].id===eid){Object.assign(DB.checklists[i],data);break;}toast('✅ Check-list actualizado');}
-  else{DB.checklists.push(Object.assign({id:uid()},data));toast('✅ Check-list creado');}
-  closeM('m-cl'); renderChecklists();
+  if(typeof window.saveChecklistToFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore para checklists');
+    return;
+  }
+  try{
+    await window.saveChecklistToFirestore(data);
+    closeM('m-cl');
+    toast(eid?'✅ Check-list actualizado':'✅ Check-list creado');
+  }catch(err){
+    console.error('Error guardando checklist en Firestore:',err);
+    toast('❌ No se pudo guardar el check-list');
+  }
 }
-function delCl(id){ confirm_('¿Eliminar este check-list?',function(){ DB.checklists=DB.checklists.filter(function(c){return c.id!==id;}); renderChecklists(); toast('🗑️ Check-list eliminado'); }); }
+function delCl(id){ confirm_('¿Eliminar este check-list?',async function(){
+  if(typeof window.deleteChecklistFromFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore para eliminar');
+    return;
+  }
+  try{
+    await window.deleteChecklistFromFirestore(id);
+    toast('🗑️ Check-list eliminado');
+  }catch(err){
+    console.error('Error eliminando checklist:',err);
+    toast('❌ No se pudo eliminar el check-list');
+  }
+}); }
+
+async function toggleChecklistPublished(id){
+  var cl=gCl(id);
+  if(!cl){ toast('⚠️ Checklist no encontrado'); return; }
+  if(typeof window.setChecklistPublishedInFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore');
+    return;
+  }
+  try{
+    await window.setChecklistPublishedInFirestore(id,!cl.published);
+    toast(!cl.published?'✅ Checklist publicado':'✅ Checklist despublicado');
+  }catch(err){
+    console.error('Error cambiando publicación:',err);
+    toast('❌ No se pudo actualizar estado de publicación');
+  }
+}
 
 // ══════════════ TECH VIEW ══════════════
+function setWorkModeButtonLabel(){
+  var btn=document.querySelector('#wd-wrap .btn.btn-success');
+  if(!btn) return;
+  btn.textContent=currentWorkMode==='free'?'✓ Guardar Checklist y Generar Reporte':'✓ Cerrar Orden y Generar Reporte';
+}
+
+function renderTechChecklistPage(){
+  var box=document.getElementById('tech-checklist-grid');
+  if(!box) return;
+  var list=DB.checklists.filter(function(cl){ return cl && cl.published===true; });
+  if(!list.length){
+    box.innerHTML='<div class="empty"><div class="empty-ico">🧾</div>No hay checklists publicados por el administrador</div>';
+    return;
+  }
+  box.innerHTML=list.map(function(cl){
+    var totalItems=0;
+    (cl.sections||[]).forEach(function(sec){ if(sec.type==='checklist') totalItems+=(sec.items||[]).length; });
+    return '<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(34,197,94,.12);">🧾</div><div><div class="card-title">'+cl.name+'</div><div class="card-sub">'+cl.type+'</div></div></div></div><div style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;margin-bottom:10px;"><span>📅 '+formatChecklistDate(cl.updatedAt||cl.createdAt)+'</span><span>☑️ '+totalItems+' tareas</span></div><button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="openTechChecklistWork(\''+cl.id+'\')">Iniciar checklist</button></div>';
+  }).join('');
+}
+
+function openTechChecklistWork(checklistId){
+  var ck=gCl(checklistId);
+  if(!ck){ toast('⚠️ Checklist no disponible'); return; }
+  goTo('tech',document.getElementById('ni-tech'));
+  currentWorkMode='free';
+  currentFreeChecklistId=checklistId;
+  curOrderId=null;
+  notifyLiveTrackingContext();
+  document.getElementById('wd-id').textContent='LIBRE-'+String(Date.now()).slice(-6);
+  document.getElementById('wd-name').textContent=ck.name;
+  document.getElementById('wd-loc').textContent='Checklist libre · '+ck.type;
+
+  chkState={};
+  var dynHtml='';
+  ck.sections.forEach(function(sec,si){
+    if(sec.type==='checklist'){
+      dynHtml+='<div class="sec" style="margin-top:16px;">'+sec.title+'</div><div class="cl-list" id="cl-sec-'+si+'">';
+      (sec.items||[]).forEach(function(item,ii){
+        var key='s'+si+'i'+ii;
+        chkState[key]=false;
+        dynHtml+='<div class="ci" id="ci-'+key+'" onclick="toggleCheck(\''+key+'\')"><div class="ci-box" id="cb-'+key+'"></div><span class="ci-lbl">'+item.text+'</span><span class="ci-cat">'+(item.cat||'General')+'</span></div>';
+      });
+      dynHtml+='</div>';
+    }
+    if(sec.type==='fields'){
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+sec.title+'</div>';
+      (sec.fields||[]).forEach(function(f){
+        dynHtml+='<div class="dyn-field"><label>'+f.label+'</label>'+(f.inputType==='textarea'?'<textarea class="ft" id="df-'+f.id+'" placeholder="'+f.label+'..."></textarea>':'<input class="fi" id="df-'+f.id+'" type="'+f.inputType+'" placeholder="'+f.label+'">')+'</div>';
+      });
+      dynHtml+='</div>';
+    }
+    if(sec.type==='textarea'){
+      dynHtml+='<div class="fg" style="margin-top:14px;"><label class="fl">'+sec.title+'</label><textarea class="ft" id="dta-'+sec.id+'" placeholder="'+(sec.placeholder||'Escribe aquí...')+'"></textarea></div>';
+    }
+  });
+  if(!dynHtml){
+    chkState['s0i0']=false;
+    dynHtml='<div class="sec" style="margin-top:16px;">Actividades</div><div class="cl-list"><div class="ci" id="ci-s0i0" onclick="toggleCheck(\'s0i0\')"><div class="ci-box" id="cb-s0i0"></div><span class="ci-lbl">Revisión general</span><span class="ci-cat">General</span></div></div>';
+  }
+  document.getElementById('wd-dynamic').innerHTML=dynHtml;
+  sigSigned=false;
+  document.getElementById('sig-st').textContent='Sin firmar';
+  resetPhotoSlots();
+  clearSig();
+  updateProg();
+  setWorkModeButtonLabel();
+  document.getElementById('wd-wrap').style.display='block';
+  setTimeout(function(){ document.getElementById('wd-wrap').scrollIntoView({behavior:'smooth'}); },80);
+  toast('🧾 Checklist abierto');
+}
+
 function renderTechView(){
   var sel=document.getElementById('tv-sel'),prev=sel.value;
   sel.innerHTML=DB.technicians.filter(function(t){return t.status==='active';}).map(function(t){return'<option value="'+t.id+'">'+t.name+'</option>';}).join('');
@@ -1617,6 +1790,9 @@ function switchTech(tid){
   }).join('');
   document.getElementById('tv-list').innerHTML=html||'<div class="empty"><div class="empty-ico">🎉</div>Sin órdenes pendientes</div>';
   document.getElementById('wd-wrap').style.display='none';
+  currentWorkMode='order';
+  currentFreeChecklistId='';
+  setWorkModeButtonLabel();
   curOrderId=null;
   notifyLiveTrackingContext();
 }
@@ -1624,6 +1800,9 @@ function switchTech(tid){
 function openWork(id){
   var o=null; for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===id){o=DB.orders[i];break;}
   if(!o) return;
+  currentWorkMode='order';
+  currentFreeChecklistId='';
+  setWorkModeButtonLabel();
   curOrderId=id;
   notifyLiveTrackingContext();
   var cl=gClient(o.clientId),br=gBranch(o.branchId),ck=gCl(o.clId);
@@ -2259,8 +2438,7 @@ function initSig(){
 function markSig(){ sigSigned=true; document.getElementById('sig-c').classList.add('signed'); document.getElementById('sig-st').textContent='✓ Firmado'; }
 function clearSig(){ var c=document.getElementById('sig-c'); c.getContext('2d').clearRect(0,0,c.width,c.height); sigSigned=false; c.classList.remove('signed'); document.getElementById('sig-st').textContent='Sin firmar'; }
 
-function collectChecklistReportData(order,total,done){
-  var ck=gCl(order.clId);
+function collectChecklistReportData(ck,total,done){
   var respuestas={sections:[]},obs=[];
 
   if(ck){
@@ -2304,19 +2482,32 @@ async function closeOrder(){
   var keys=Object.keys(chkState),total=keys.length,done=keys.filter(function(k){return chkState[k];}).length;
   if(done<Math.ceil(total*0.5)){toast('⚠️ Completa al menos el 50% del check-list');return;}
   if(!sigSigned){toast('✏️ Se requiere la firma del responsable');return;}
-  var o=null; for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===curOrderId){o=DB.orders[i];break;}
-  if(!o)return;
-
-  if(typeof window.saveReportToFirestore!=='function'){
-    toast('⚠️ Módulo de reportes no disponible');
-    return;
+  var isFree=currentWorkMode==='free';
+  var o=null;
+  var ck=null;
+  var tc=null;
+  var cl=null;
+  var br=null;
+  var generatedFolio=isFree?('CHK-'+String(Date.now()).slice(-8)):'';
+  if(isFree){
+    ck=gCl(currentFreeChecklistId);
+    if(!ck){ toast('⚠️ Checklist libre no encontrado'); return; }
+    var sel=document.getElementById('tv-sel');
+    tc=sel?gTech(sel.value):null;
+  }else{
+    for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===curOrderId){o=DB.orders[i];break;}
+    if(!o) return;
+    ck=gCl(o.clId);
+    tc=gTech(o.techId);
+    cl=gClient(o.clientId);
+    br=gBranch(o.branchId);
   }
 
   closingOrderInProgress=true;
   var closeBtn=document.querySelector('#wd-wrap .btn.btn-success');
   if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
 
-  var ck=gCl(o.clId),tc=gTech(o.techId),cl=gClient(o.clientId),br=gBranch(o.branchId),captured=collectChecklistReportData(o,total,done);
+  var captured=collectChecklistReportData(ck,total,done);
   try{
     var locationData=await getTabletLocationForReport();
     if(!locationData || typeof locationData.lat!=='number' || typeof locationData.lng!=='number'){
@@ -2332,34 +2523,61 @@ async function closeOrder(){
 
     console.log('[closeOrder] Inicio de subida. Imágenes:',imagenes.length);
     var urls=await Promise.all(imagenes.map(async function(img){
-      var url=await window.uploadEvidenceImage(img.file,{orderId:o.id,slotIndex:img.slotIndex});
+      var uploadOrderId=isFree?generatedFolio:o.id;
+      var url=await window.uploadEvidenceImage(img.file,{orderId:uploadOrderId,slotIndex:img.slotIndex});
       if(pendingPhotos[img.slotIndex]) pendingPhotos[img.slotIndex].url=url;
       console.log('[closeOrder] Imagen subida slot',img.slotIndex,'url:',url);
       return url;
     }));
     console.log('[closeOrder] Fin de subida. URLs:',urls.length);
 
-    var reportData={
-      ordenId:o.id,
-      tecnicoId:o.techId,
-      tecnicoNombre:tc?tc.name:'',
-      checklist:{id:o.clId,name:ck?ck.name:'—'},
-      respuestas:captured.respuestas,
-      observaciones:captured.observaciones||o.desc||'',
-      fotos:urls,
-      ubicacion:{
-        lat:locationData.lat,
-        lng:locationData.lng,
-        accuracy:locationData.accuracy||0,
-        direccionAprox:locationData.address||'',
-        capturedAt:locationData.capturedAt||new Date().toISOString(),
-        source:'navigator.geolocation'
+    if(isFree){
+      if(typeof window.saveChecklistReportToFirestore!=='function'){
+        throw new Error('saveChecklistReportToFirestore no está disponible');
       }
-    };
-
-    console.log('[closeOrder] Antes de guardar reporte');
-    await window.saveReportToFirestore(reportData);
-    console.log('[closeOrder] Reporte guardado correctamente');
+      console.log('[closeOrder] Guardando checklist libre en Firestore');
+      await window.saveChecklistReportToFirestore({
+        checklistId:ck.id,
+        checklistName:ck.name,
+        technicianName:tc?tc.name:'',
+        answers:captured.respuestas,
+        photos:urls,
+        location:{
+          lat:locationData.lat,
+          lng:locationData.lng,
+          accuracy:locationData.accuracy||0,
+          direccionAprox:locationData.address||'',
+          capturedAt:locationData.capturedAt||new Date().toISOString(),
+          source:'navigator.geolocation'
+        },
+        signatureData:document.getElementById('sig-c').toDataURL('image/png')
+      });
+      console.log('[closeOrder] Checklist libre guardado correctamente');
+    }else{
+      if(typeof window.saveReportToFirestore!=='function'){
+        throw new Error('saveReportToFirestore no está disponible');
+      }
+      var reportData={
+        ordenId:o.id,
+        tecnicoId:o.techId,
+        tecnicoNombre:tc?tc.name:'',
+        checklist:{id:o.clId,name:ck?ck.name:'—'},
+        respuestas:captured.respuestas,
+        observaciones:captured.observaciones||o.desc||'',
+        fotos:urls,
+        ubicacion:{
+          lat:locationData.lat,
+          lng:locationData.lng,
+          accuracy:locationData.accuracy||0,
+          direccionAprox:locationData.address||'',
+          capturedAt:locationData.capturedAt||new Date().toISOString(),
+          source:'navigator.geolocation'
+        }
+      };
+      console.log('[closeOrder] Antes de guardar reporte');
+      await window.saveReportToFirestore(reportData);
+      console.log('[closeOrder] Reporte guardado correctamente');
+    }
 
     // Generación automática de PDF al cerrar orden.
     try{
@@ -2368,14 +2586,14 @@ async function closeOrder(){
         .filter(function(src){ return !!src; });
       var signatureData=document.getElementById('sig-c').toDataURL('image/png');
       var pdfInfo=createAndStoreReportPdf({
-        ordenId:o.id,
+        ordenId:isFree?generatedFolio:o.id,
         fecha:new Date(),
         tecnicoNombre:tc?tc.name:'',
-        clienteNombre:cl?cl.name:'—',
-        sucursalNombre:br?br.name:'—',
-        tipoMantenimiento:o.type||'—',
+        clienteNombre:isFree?'Checklist libre':(cl?cl.name:'—'),
+        sucursalNombre:isFree?'Sin sucursal':(br?br.name:'—'),
+        tipoMantenimiento:isFree?('Checklist libre · '+(ck?ck.type:'General')):(o.type||'—'),
         checklistNombre:ck?ck.name:'—',
-        descripcionServicio:captured.observaciones||o.desc||'Sin observaciones registradas.',
+        descripcionServicio:captured.observaciones||(!isFree&&o?o.desc:'')||'Sin observaciones registradas.',
         respuestas:captured.respuestas,
         photoPreviews:photoPreviews,
         signatureData:signatureData
@@ -2387,25 +2605,35 @@ async function closeOrder(){
       toast('⚠️ Reporte guardado, pero no se pudo generar el PDF');
     }
 
-    o.status='done';
+    var reportOrder=isFree
+      ? {id:generatedFolio,type:'Checklist libre',clientId:'',branchId:'',techId:tc?tc.id:'',clId:ck?ck.id:'',desc:captured.observaciones||''}
+      : o;
+    if(!isFree){
+      o.status='done';
+    }else{
+      currentWorkMode='order';
+      currentFreeChecklistId='';
+      renderTechChecklistPage();
+    }
     curOrderId=null;
     notifyLiveTrackingContext();
     document.getElementById('wd-wrap').style.display='none';
-    buildReport(o,locationData);
+    buildReport(reportOrder,locationData);
     goTo('report',document.getElementById('ni-report'));
     renderTechView(); renderDashboard();
-    toast('✅ Reporte generado y guardado');
+    toast(isFree?'✅ Checklist guardado y reporte generado':'✅ Reporte generado y guardado');
     }catch(err){
       console.error('Error en cierre de orden:',err);
       var emsg=String((err&&err.message)||'');
       if(emsg.indexOf('ubicación GPS')!==-1){
         toast('⚠️ Activa la ubicación exacta para cerrar la orden');
       }else{
-        toast('❌ No se pudo cerrar la orden. Revisa la subida de imágenes e intenta nuevamente.');
+        toast('❌ No se pudo guardar. Revisa la subida de imágenes e intenta nuevamente.');
       }
   }finally{
     closingOrderInProgress=false;
-    if(closeBtn){ closeBtn.disabled=false; closeBtn.style.opacity=''; closeBtn.textContent='✓ Cerrar Orden y Generar Reporte'; }
+    if(closeBtn){ closeBtn.disabled=false; closeBtn.style.opacity=''; }
+    setWorkModeButtonLabel();
   }
 }
 
@@ -2480,6 +2708,7 @@ function buildReport(o,locationData){
 
 bindPhotoInput();
 initSig();
+setWorkModeButtonLabel();
 renderDashboard();
 renderTechLiveGpsPanel();
 </script>

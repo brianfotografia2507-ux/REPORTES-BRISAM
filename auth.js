@@ -13,11 +13,14 @@ import {
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
+  query,
   setDoc,
   serverTimestamp,
+  where,
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 import {
   getDownloadURL,
@@ -31,7 +34,7 @@ var roleLandingPage = {
 };
 
 var roleAllowedPages = {
-  tecnico: ["tech", "report"],
+  tecnico: ["tech", "tech-checklists", "report"],
   administrador: ["dashboard", "map", "orders", "clients", "branches", "technicians", "equipment", "checklists", "report"]
 };
 
@@ -69,6 +72,7 @@ var LIVE_LOCATION_MIN_DISTANCE_M = 35;
 var LIVE_LOCATION_FAST_MOVE_INTERVAL_MS = 15000;
 var LIVE_LOCATION_PULSE_MS = 20000;
 var adminLiveLocationsUnsubscribe = null;
+var checklistUnsubscribe = null;
 
 function withTimeout(promise, ms, label) {
   return new Promise(function (resolve, reject) {
@@ -258,6 +262,7 @@ async function loadUserState(user) {
     currentUserProfile = null;
     stopLiveLocationTracking();
     stopAdminLiveLocationsSubscription();
+    stopChecklistSubscription();
     emitLiveLocationUiState({
       active: false,
       connection: "Sin sesión",
@@ -282,6 +287,7 @@ async function loadUserState(user) {
     setUserHeader(profile || {}, user.email || "");
     showApp(true);
     goRoleLanding(role);
+    startChecklistSubscription(role);
     if (role === "tecnico") {
       stopAdminLiveLocationsSubscription();
       startLiveLocationTracking(user, profile || {}).catch(function (err) {
@@ -301,6 +307,7 @@ async function loadUserState(user) {
   } catch (err) {
     stopLiveLocationTracking();
     stopAdminLiveLocationsSubscription();
+    stopChecklistSubscription();
     await signOut(auth);
     setAuthMessage("No fue posible cargar el perfil del usuario.", "error");
   }
@@ -499,6 +506,64 @@ function stopAdminLiveLocationsSubscription() {
   }
 }
 
+function stopChecklistSubscription() {
+  if (checklistUnsubscribe) {
+    try {
+      checklistUnsubscribe();
+    } catch (err) {
+      console.warn("Error cerrando suscripción checklists:", err);
+    }
+    checklistUnsubscribe = null;
+  }
+}
+
+function emitChecklistDocs(checklistDocs) {
+  if (typeof window.setFirestoreChecklistsData === "function") {
+    try {
+      window.setFirestoreChecklistsData(checklistDocs);
+    } catch (err) {
+      console.warn("No se pudo actualizar checklists en UI:", err);
+    }
+  }
+}
+
+function mapChecklistDoc(snap) {
+  var data = (snap && typeof snap.data === "function" ? snap.data() : {}) || {};
+  return {
+    id: snap.id,
+    name: String(data.name || "").trim(),
+    type: String(data.type || "General"),
+    published: data.published === true,
+    sections: Array.isArray(data.sections) ? data.sections : [],
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null,
+    createdBy: data.createdBy || "",
+  };
+}
+
+function startChecklistSubscription(role) {
+  if (!firebaseAvailable || !db || !auth.currentUser) return;
+  stopChecklistSubscription();
+  var ref = collection(db, "checklists");
+  var source = role === "tecnico" ? query(ref, where("published", "==", true)) : ref;
+  checklistUnsubscribe = onSnapshot(
+    source,
+    function (snap) {
+      var docs = [];
+      snap.forEach(function (item) {
+        docs.push(mapChecklistDoc(item));
+      });
+      emitChecklistDocs(docs);
+    },
+    function (err) {
+      console.error("Error sincronizando checklists:", err);
+      if (typeof window.toast === "function" && currentRole === "administrador") {
+        window.toast("⚠️ No se pudieron sincronizar checklists");
+      }
+    }
+  );
+}
+
 async function startLiveLocationTracking(user, profile) {
   stopLiveLocationTracking();
   if (!user || !profile || profile.role !== "tecnico") return;
@@ -647,6 +712,7 @@ window.logoutUser = async function logoutUser() {
   } finally {
     stopLiveLocationTracking();
     stopAdminLiveLocationsSubscription();
+    stopChecklistSubscription();
     await signOut(auth);
   }
 };
@@ -695,6 +761,124 @@ window.subscribeAdminLiveLocations = function subscribeAdminLiveLocations(onChan
   return function unsubscribeLiveLocations() {
     stopAdminLiveLocationsSubscription();
   };
+};
+
+async function resolveCurrentUserWithProfile() {
+  if (!firebaseAvailable || !auth.currentUser) {
+    throw new Error("Debes iniciar sesión para continuar.");
+  }
+  var user = auth.currentUser;
+  var profile = currentUserProfile;
+  if (!profile || !profile.role) {
+    profile = (await getProfile(user.uid)) || {};
+    currentUserProfile = profile;
+  }
+  return { user: user, profile: profile };
+}
+
+function cloneChecklistSections(sections) {
+  if (!Array.isArray(sections)) return [];
+  try {
+    return JSON.parse(JSON.stringify(sections));
+  } catch (_err) {
+    return [];
+  }
+}
+
+window.saveChecklistToFirestore = async function saveChecklistToFirestore(checklistData) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden guardar checklists.");
+  }
+  var payload = Object.assign({}, checklistData || {});
+  var name = String(payload.name || "").trim();
+  if (!name) throw new Error("El nombre del checklist es obligatorio.");
+  var data = {
+    name: name,
+    type: String(payload.type || "General").trim() || "General",
+    published: payload.published === true,
+    sections: cloneChecklistSections(payload.sections),
+    updatedAt: serverTimestamp(),
+  };
+  if (!data.sections.length) {
+    throw new Error("Agrega al menos una sección al checklist.");
+  }
+  var id = String(payload.id || "").trim();
+  if (id) {
+    await setDoc(doc(db, "checklists", id), data, { merge: true });
+    return { id: id, updated: true };
+  }
+  data.createdAt = serverTimestamp();
+  data.createdBy = resolved.user.uid;
+  var created = await addDoc(collection(db, "checklists"), data);
+  return { id: created.id, updated: false };
+};
+
+window.deleteChecklistFromFirestore = async function deleteChecklistFromFirestore(id) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden eliminar checklists.");
+  }
+  var safeId = String(id || "").trim();
+  if (!safeId) throw new Error("Checklist inválido.");
+  await deleteDoc(doc(db, "checklists", safeId));
+  return { id: safeId };
+};
+
+window.setChecklistPublishedInFirestore = async function setChecklistPublishedInFirestore(id, published) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden publicar checklists.");
+  }
+  var safeId = String(id || "").trim();
+  if (!safeId) throw new Error("Checklist inválido.");
+  await setDoc(
+    doc(db, "checklists", safeId),
+    {
+      published: !!published,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return { id: safeId, published: !!published };
+};
+
+window.saveChecklistReportToFirestore = async function saveChecklistReportToFirestore(reportData) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  var data = Object.assign({}, reportData || {});
+  var payload = {
+    checklistId: String(data.checklistId || "").trim(),
+    checklistName: String(data.checklistName || "").trim() || "Checklist",
+    technicianId: resolved.user.uid,
+    technicianName:
+      String(data.technicianName || "").trim() ||
+      resolved.profile.name ||
+      resolved.user.displayName ||
+      resolved.user.email ||
+      "Técnico",
+    answers: data.answers || {},
+    photos: Array.isArray(data.photos) ? data.photos.filter(Boolean) : [],
+    createdAt: serverTimestamp(),
+    location: data.location || null,
+    signatureData: data.signatureData || "",
+  };
+  if (!payload.checklistId) {
+    throw new Error("Checklist inválido para guardar reporte.");
+  }
+  var created = await addDoc(collection(db, "checklist_reports"), payload);
+  return { id: created.id };
 };
 
 window.saveReportToFirestore = async function saveReportToFirestore(reportData) {
