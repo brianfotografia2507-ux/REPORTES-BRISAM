@@ -73,6 +73,7 @@ var LIVE_LOCATION_FAST_MOVE_INTERVAL_MS = 15000;
 var LIVE_LOCATION_PULSE_MS = 20000;
 var adminLiveLocationsUnsubscribe = null;
 var checklistUnsubscribe = null;
+var branchesUnsubscribe = null;
 
 function withTimeout(promise, ms, label) {
   return new Promise(function (resolve, reject) {
@@ -263,6 +264,7 @@ async function loadUserState(user) {
     stopLiveLocationTracking();
     stopAdminLiveLocationsSubscription();
     stopChecklistSubscription();
+    stopBranchesSubscription();
     emitLiveLocationUiState({
       active: false,
       connection: "Sin sesión",
@@ -288,6 +290,7 @@ async function loadUserState(user) {
     showApp(true);
     goRoleLanding(role);
     startChecklistSubscription(role);
+    startBranchesSubscription();
     if (role === "tecnico") {
       stopAdminLiveLocationsSubscription();
       startLiveLocationTracking(user, profile || {}).catch(function (err) {
@@ -308,6 +311,7 @@ async function loadUserState(user) {
     stopLiveLocationTracking();
     stopAdminLiveLocationsSubscription();
     stopChecklistSubscription();
+    stopBranchesSubscription();
     await signOut(auth);
     setAuthMessage("No fue posible cargar el perfil del usuario.", "error");
   }
@@ -517,6 +521,76 @@ function stopChecklistSubscription() {
   }
 }
 
+function stopBranchesSubscription() {
+  if (branchesUnsubscribe) {
+    try {
+      branchesUnsubscribe();
+    } catch (err) {
+      console.warn("Error cerrando suscripción branches:", err);
+    }
+    branchesUnsubscribe = null;
+  }
+}
+
+function normalizeBranchNumber(value) {
+  if (typeof value === "number" && isFinite(value)) return value;
+  var parsed = Number(value);
+  return isFinite(parsed) ? parsed : null;
+}
+
+function mapBranchDoc(snap) {
+  var data = (snap && typeof snap.data === "function" ? snap.data() : {}) || {};
+  var lat = normalizeBranchNumber(data.lat);
+  var lng = normalizeBranchNumber(data.lng);
+  var radius = normalizeBranchNumber(data.geofenceRadius);
+  return {
+    id: snap.id,
+    clientId: String(data.clientId || "").trim(),
+    name: String(data.name || "").trim() || "Sucursal",
+    address: String(data.address || "").trim(),
+    contact: String(data.contact || "").trim(),
+    phone: String(data.phone || "").trim(),
+    status: data.status === "inactive" ? "inactive" : "active",
+    lat: lat,
+    lng: lng,
+    geofenceRadius: radius && radius > 0 ? Math.round(radius) : 120,
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null,
+    createdBy: data.createdBy || "",
+  };
+}
+
+function emitBranchDocs(branchDocs) {
+  if (typeof window.setFirestoreBranchesData === "function") {
+    try {
+      window.setFirestoreBranchesData(branchDocs);
+    } catch (err) {
+      console.warn("No se pudo actualizar branches en UI:", err);
+    }
+  }
+}
+
+function startBranchesSubscription() {
+  if (!firebaseAvailable || !db || !auth.currentUser) return;
+  stopBranchesSubscription();
+  branchesUnsubscribe = onSnapshot(
+    collection(db, "branches"),
+    function (snap) {
+      var docs = [];
+      snap.forEach(function (item) {
+        docs.push(mapBranchDoc(item));
+      });
+      emitBranchDocs(docs);
+    },
+    function (err) {
+      console.error("Error sincronizando branches:", err);
+      if (typeof window.toast === "function" && currentRole === "administrador") {
+        window.toast("⚠️ No se pudieron sincronizar sucursales");
+      }
+    }
+  );
+}
+
 function emitChecklistDocs(checklistDocs) {
   if (typeof window.setFirestoreChecklistsData === "function") {
     try {
@@ -713,6 +787,7 @@ window.logoutUser = async function logoutUser() {
     stopLiveLocationTracking();
     stopAdminLiveLocationsSubscription();
     stopChecklistSubscription();
+    stopBranchesSubscription();
     await signOut(auth);
   }
 };
@@ -775,6 +850,55 @@ async function resolveCurrentUserWithProfile() {
   }
   return { user: user, profile: profile };
 }
+
+window.saveBranchToFirestore = async function saveBranchToFirestore(branchData) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden guardar sucursales.");
+  }
+  var payload = Object.assign({}, branchData || {});
+  var name = String(payload.name || "").trim();
+  if (!name) throw new Error("El nombre de la sucursal es obligatorio.");
+  var radius = normalizeBranchNumber(payload.geofenceRadius);
+  var data = {
+    clientId: String(payload.clientId || "").trim(),
+    name: name,
+    address: String(payload.address || "").trim(),
+    contact: String(payload.contact || "").trim(),
+    phone: String(payload.phone || "").trim(),
+    status: payload.status === "inactive" ? "inactive" : "active",
+    lat: normalizeBranchNumber(payload.lat),
+    lng: normalizeBranchNumber(payload.lng),
+    geofenceRadius: radius && radius > 0 ? Math.round(radius) : 120,
+    updatedAt: serverTimestamp(),
+  };
+  var id = String(payload.id || "").trim();
+  if (id) {
+    await setDoc(doc(db, "branches", id), data, { merge: true });
+    return { id: id, updated: true };
+  }
+  data.createdAt = serverTimestamp();
+  data.createdBy = resolved.user.uid;
+  var created = await addDoc(collection(db, "branches"), data);
+  return { id: created.id, updated: false };
+};
+
+window.deleteBranchFromFirestore = async function deleteBranchFromFirestore(id) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden eliminar sucursales.");
+  }
+  var safeId = String(id || "").trim();
+  if (!safeId) throw new Error("Sucursal inválida.");
+  await deleteDoc(doc(db, "branches", safeId));
+  return { id: safeId };
+};
 
 function cloneChecklistSections(sections) {
   if (!Array.isArray(sections)) return [];

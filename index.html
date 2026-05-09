@@ -88,6 +88,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .map-marker-orange{background:#f97316;}
 .map-marker-red{background:#ef4444;}
 
+/* ── BRANCH GPS ── */
+.branch-geo-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.branch-geo-map{height:190px;border-radius:10px;border:1px solid var(--border);overflow:hidden;background:var(--surface2);}
+.branch-geo-note{font-size:11px;color:var(--muted);}
+
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .18s;font-family:'DM Sans',sans-serif;}
 .btn-primary{background:var(--accent);color:#fff;}
@@ -348,6 +353,7 @@ canvas.sig.signed{border-color:var(--green);}
   .map-shell{grid-template-columns:1fr;min-height:auto;}
   .map-side{max-height:280px;}
   #squad-map{min-height:420px;}
+  .branch-geo-grid{grid-template-columns:1fr;}
 }
 </style>
 </head>
@@ -645,6 +651,22 @@ canvas.sig.signed{border-color:var(--green);}
       <div class="fg"><label class="fl">Contacto</label><input class="fi" id="b-contact" placeholder="Gerente / encargado"></div>
       <div class="fg"><label class="fl">Teléfono</label><input class="fi" id="b-phone" placeholder="+52 81..."></div>
     </div>
+    <div class="fg">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+        <label class="fl" style="margin:0;">Ubicación GPS</label>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="useCurrentBranchLocation()">📍 Usar ubicación actual</button>
+      </div>
+      <div class="branch-geo-grid">
+        <input class="fi" id="b-lat" type="number" step="0.000001" placeholder="Latitud">
+        <input class="fi" id="b-lng" type="number" step="0.000001" placeholder="Longitud">
+      </div>
+      <div style="margin-top:10px;">
+        <label class="fl">Radio geofence (metros)</label>
+        <input class="fi" id="b-geofence-radius" type="number" min="20" step="1" value="120">
+      </div>
+      <div class="branch-geo-note" style="margin-top:6px;">Se usará para validar proximidad del servicio en campo.</div>
+      <div class="branch-geo-map" id="b-geo-map" style="margin-top:10px;"></div>
+    </div>
     <div class="fg"><label class="fl">Estado</label><select class="fs" id="b-status"><option value="active">Activa</option><option value="inactive">Inactiva</option></select></div>
   </div>
   <div class="m-foot"><button class="btn btn-ghost" onclick="closeM('m-branch')">Cancelar</button><button class="btn btn-primary" onclick="saveBranch()">Guardar</button></div>
@@ -906,6 +928,27 @@ function normalizeChecklistDoc(cl){
   };
 }
 
+function normalizeBranchDoc(branch){
+  var data=branch||{};
+  var lat=Number(data.lat);
+  var lng=Number(data.lng);
+  var radius=Number(data.geofenceRadius);
+  return {
+    id:String(data.id||uid()),
+    clientId:String(data.clientId||''),
+    name:String(data.name||'Sucursal'),
+    address:String(data.address||''),
+    contact:String(data.contact||''),
+    phone:String(data.phone||''),
+    status:data.status==='inactive'?'inactive':'active',
+    lat:isFinite(lat)?lat:null,
+    lng:isFinite(lng)?lng:null,
+    geofenceRadius:(isFinite(radius)&&radius>0)?Math.round(radius):120,
+    createdAt:data.createdAt||null,
+    updatedAt:data.updatedAt||null
+  };
+}
+
 window.setFirestoreChecklistsData=function setFirestoreChecklistsData(items){
   var list=Array.isArray(items)?items.map(normalizeChecklistDoc):[];
   if(!list.length){
@@ -915,6 +958,13 @@ window.setFirestoreChecklistsData=function setFirestoreChecklistsData(items){
   }
   renderChecklists();
   renderTechChecklistPage();
+};
+
+window.setFirestoreBranchesData=function setFirestoreBranchesData(items){
+  var list=Array.isArray(items)?items.map(normalizeBranchDoc):[];
+  DB.branches=list;
+  renderBranches();
+  renderEquipment();
 };
 
 var APP_ACTIVE_PAGE='dashboard';
@@ -1172,6 +1222,117 @@ function renderMapPage(){
   if(!ensureAdminMapInstance()) return;
   startMapLiveFeed();
   setTimeout(function(){ if(MAP_STATE.map) MAP_STATE.map.invalidateSize(); },120);
+}
+
+var BRANCH_GEO_STATE={
+  map:null,
+  marker:null,
+  circle:null,
+  defaults:[25.6866,-100.3161]
+};
+
+function branchGeoNum(value){
+  var n=Number(value);
+  return isFinite(n)?n:null;
+}
+
+function getBranchGeoRadiusInput(){
+  var raw=branchGeoNum((document.getElementById('b-geofence-radius')||{}).value);
+  if(!raw || raw<=0) return 120;
+  return Math.round(raw);
+}
+
+function ensureBranchGeoMap(){
+  var el=document.getElementById('b-geo-map');
+  if(!el || typeof window.L==='undefined') return null;
+  if(!BRANCH_GEO_STATE.map){
+    BRANCH_GEO_STATE.map=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,minZoom:3});
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+      attribution:'&copy; OpenStreetMap &copy; CARTO',
+      subdomains:'abcd',
+      maxZoom:20
+    }).addTo(BRANCH_GEO_STATE.map);
+    BRANCH_GEO_STATE.map.setView(BRANCH_GEO_STATE.defaults,11);
+  }
+  return BRANCH_GEO_STATE.map;
+}
+
+function updateBranchGeoPreview(centerMap){
+  var map=ensureBranchGeoMap();
+  if(!map) return;
+  var lat=branchGeoNum((document.getElementById('b-lat')||{}).value);
+  var lng=branchGeoNum((document.getElementById('b-lng')||{}).value);
+  var radius=getBranchGeoRadiusInput();
+  if(typeof lat!=='number' || typeof lng!=='number'){
+    if(BRANCH_GEO_STATE.marker){ map.removeLayer(BRANCH_GEO_STATE.marker); BRANCH_GEO_STATE.marker=null; }
+    if(BRANCH_GEO_STATE.circle){ map.removeLayer(BRANCH_GEO_STATE.circle); BRANCH_GEO_STATE.circle=null; }
+    if(centerMap){ map.setView(BRANCH_GEO_STATE.defaults,11); }
+    setTimeout(function(){ map.invalidateSize(); },80);
+    return;
+  }
+  if(!BRANCH_GEO_STATE.marker){
+    BRANCH_GEO_STATE.marker=L.marker([lat,lng]).addTo(map);
+  }else{
+    BRANCH_GEO_STATE.marker.setLatLng([lat,lng]);
+  }
+  if(!BRANCH_GEO_STATE.circle){
+    BRANCH_GEO_STATE.circle=L.circle([lat,lng],{
+      radius:radius,
+      color:'#f97316',
+      fillColor:'#f97316',
+      fillOpacity:0.18,
+      weight:1.5
+    }).addTo(map);
+  }else{
+    BRANCH_GEO_STATE.circle.setLatLng([lat,lng]);
+    BRANCH_GEO_STATE.circle.setRadius(radius);
+  }
+  if(centerMap){
+    var bounds=BRANCH_GEO_STATE.circle.getBounds();
+    map.fitBounds(bounds,{padding:[16,16]});
+  }
+  setTimeout(function(){ map.invalidateSize(); },80);
+}
+
+function bindBranchGeoInputs(){
+  ['b-lat','b-lng','b-geofence-radius'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el || el.__geoBound) return;
+    el.__geoBound=true;
+    el.addEventListener('input',function(){ updateBranchGeoPreview(false); });
+    el.addEventListener('change',function(){ updateBranchGeoPreview(false); });
+  });
+}
+
+function setBranchGeoInputs(lat,lng,radius){
+  document.getElementById('b-lat').value=(typeof lat==='number'&&isFinite(lat))?lat.toFixed(6):'';
+  document.getElementById('b-lng').value=(typeof lng==='number'&&isFinite(lng))?lng.toFixed(6):'';
+  document.getElementById('b-geofence-radius').value=(radius&&radius>0)?String(Math.round(radius)):'120';
+}
+
+function useCurrentBranchLocation(){
+  if(!navigator.geolocation){
+    toast('⚠️ Este dispositivo no soporta geolocalización');
+    return;
+  }
+  toast('📍 Obteniendo ubicación...');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var lat=Number(pos.coords.latitude.toFixed(6));
+    var lng=Number(pos.coords.longitude.toFixed(6));
+    setBranchGeoInputs(lat,lng,getBranchGeoRadiusInput());
+    updateBranchGeoPreview(true);
+    toast('✅ Ubicación de sucursal capturada');
+  },function(err){
+    var msg='No se pudo obtener ubicación';
+    if(err&&err.code===1) msg='Permiso de ubicación denegado';
+    if(err&&err.code===2) msg='Ubicación no disponible';
+    if(err&&err.code===3) msg='Tiempo de espera agotado';
+    toast('⚠️ '+msg);
+  },{
+    enableHighAccuracy:true,
+    timeout:12000,
+    maximumAge:0
+  });
 }
 
 // ══════════════ HELPERS ══════════════
@@ -1457,18 +1618,96 @@ function delClient(id){ var c=gClient(id); confirm_('¿Eliminar "'+( c?c.name:''
 
 // ══════════════ BRANCHES ══════════════
 function renderBranches(){
-  var fSel=document.getElementById('br-filter'),sel=fSel.value;
+  var fSel=document.getElementById('br-filter');
+  if(!fSel) return;
+  var sel=fSel.value;
   fSel.innerHTML='<option value="">— Todos los clientes —</option>'+DB.clients.map(function(c){return'<option value="'+c.id+'"'+(c.id===sel?' selected':'')+'>'+c.name+'</option>';}).join('');
   var list=sel?DB.branches.filter(function(b){return b.clientId===sel;}):DB.branches;
-  var html=list.map(function(b){ var cl=gClient(b.clientId),eqs=DB.equipment.filter(function(e){return e.branchId===b.id;});
-    return'<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(59,130,246,.1);">📍</div><div><div class="card-title">'+b.name+'</div><div class="card-sub">'+(cl?cl.name:'—')+'</div></div></div><div class="card-acts"><button class="btn btn-ghost btn-sm btn-icon" onclick="openBranchM(\''+b.id+'\')">✏️</button><button class="btn btn-danger btn-sm btn-icon" onclick="delBranch(\''+b.id+'\')">🗑️</button></div></div><div style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px;"><span>📍 '+b.address+'</span><span>👤 '+b.contact+' · '+b.phone+'</span></div><div class="card-meta"><span class="badge '+(b.status==='active'?'b-act':'b-ina')+'">'+(b.status==='active'?'Activa':'Inactiva')+'</span><span class="chip">'+eqs.length+' equipo'+(eqs.length!==1?'s':'')+'</span></div></div>';
+  var html=list.map(function(raw){
+    var b=normalizeBranchDoc(raw);
+    var cl=gClient(b.clientId),eqs=DB.equipment.filter(function(e){return e.branchId===b.id;});
+    var hasGps=(typeof b.lat==='number' && typeof b.lng==='number');
+    var gpsLabel=hasGps?(b.lat.toFixed(5)+', '+b.lng.toFixed(5)):'Sin GPS';
+    return '<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(59,130,246,.1);">📍</div><div><div class="card-title">'+b.name+'</div><div class="card-sub">'+(cl?cl.name:'—')+'</div></div></div><div class="card-acts"><button class="btn btn-ghost btn-sm btn-icon" onclick="openBranchM(\''+b.id+'\')">✏️</button><button class="btn btn-danger btn-sm btn-icon" onclick="delBranch(\''+b.id+'\')">🗑️</button></div></div><div style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px;"><span>📍 '+b.address+'</span><span>👤 '+b.contact+' · '+b.phone+'</span><span>🛰️ '+gpsLabel+'</span></div><div class="card-meta"><span class="badge '+(b.status==='active'?'b-act':'b-ina')+'">'+(b.status==='active'?'Activa':'Inactiva')+'</span><span class="chip">Geofence '+b.geofenceRadius+'m</span><span class="chip">'+eqs.length+' equipo'+(eqs.length!==1?'s':'')+'</span></div></div>';
   }).join('');
   html+='<div class="card card-dashed" onclick="openBranchM()"><div style="font-size:28px;color:var(--muted);">＋</div><div style="font-size:13px;color:var(--muted);">Agregar sucursal</div></div>';
   document.getElementById('grid-branches').innerHTML=html;
 }
-function openBranchM(id){ id=id||null; document.getElementById('b-eid').value=id||''; document.getElementById('m-branch-ttl').textContent=id?'Editar Sucursal':'Nueva Sucursal'; document.getElementById('b-client').innerHTML=DB.clients.map(function(c){return'<option value="'+c.id+'">'+c.name+'</option>';}).join(''); if(id){var b=gBranch(id);if(b){document.getElementById('b-client').value=b.clientId;document.getElementById('b-name').value=b.name;document.getElementById('b-addr').value=b.address;document.getElementById('b-contact').value=b.contact;document.getElementById('b-phone').value=b.phone;document.getElementById('b-status').value=b.status;}}else{['b-name','b-addr','b-contact','b-phone'].forEach(function(f){document.getElementById(f).value='';});document.getElementById('b-status').value='active';} openM('m-branch'); }
-function saveBranch(){ var eid=document.getElementById('b-eid').value; var data={clientId:document.getElementById('b-client').value,name:document.getElementById('b-name').value.trim(),address:document.getElementById('b-addr').value.trim(),contact:document.getElementById('b-contact').value.trim(),phone:document.getElementById('b-phone').value.trim(),status:document.getElementById('b-status').value}; if(!data.name){toast('⚠️ El nombre es requerido');return;} if(eid){for(var i=0;i<DB.branches.length;i++)if(DB.branches[i].id===eid){Object.assign(DB.branches[i],data);break;}toast('✅ Sucursal actualizada');}else{DB.branches.push(Object.assign({id:uid()},data));toast('✅ Sucursal agregada');} closeM('m-branch'); renderBranches(); }
-function delBranch(id){ var b=gBranch(id); confirm_('¿Eliminar "'+( b?b.name:'')+'"?',function(){ DB.equipment=DB.equipment.filter(function(e){return e.branchId!==id;}); DB.branches=DB.branches.filter(function(b){return b.id!==id;}); renderBranches(); toast('🗑️ Sucursal eliminada'); }); }
+
+function openBranchM(id){
+  id=id||null;
+  document.getElementById('b-eid').value=id||'';
+  document.getElementById('m-branch-ttl').textContent=id?'Editar Sucursal':'Nueva Sucursal';
+  document.getElementById('b-client').innerHTML=DB.clients.map(function(c){return'<option value="'+c.id+'">'+c.name+'</option>';}).join('');
+  if(id){
+    var b=gBranch(id);
+    if(b){
+      b=normalizeBranchDoc(b);
+      document.getElementById('b-client').value=b.clientId;
+      document.getElementById('b-name').value=b.name;
+      document.getElementById('b-addr').value=b.address;
+      document.getElementById('b-contact').value=b.contact;
+      document.getElementById('b-phone').value=b.phone;
+      document.getElementById('b-status').value=b.status;
+      setBranchGeoInputs(b.lat,b.lng,b.geofenceRadius||120);
+    }
+  }else{
+    ['b-name','b-addr','b-contact','b-phone','b-lat','b-lng'].forEach(function(f){document.getElementById(f).value='';});
+    document.getElementById('b-status').value='active';
+    document.getElementById('b-geofence-radius').value='120';
+  }
+  openM('m-branch');
+  bindBranchGeoInputs();
+  setTimeout(function(){ updateBranchGeoPreview(true); },120);
+}
+
+async function saveBranch(){
+  var eid=document.getElementById('b-eid').value;
+  var data={
+    id:eid||'',
+    clientId:document.getElementById('b-client').value,
+    name:document.getElementById('b-name').value.trim(),
+    address:document.getElementById('b-addr').value.trim(),
+    contact:document.getElementById('b-contact').value.trim(),
+    phone:document.getElementById('b-phone').value.trim(),
+    status:document.getElementById('b-status').value,
+    lat:branchGeoNum(document.getElementById('b-lat').value),
+    lng:branchGeoNum(document.getElementById('b-lng').value),
+    geofenceRadius:getBranchGeoRadiusInput()
+  };
+  if(!data.name){toast('⚠️ El nombre es requerido');return;}
+  if(typeof window.saveBranchToFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore para sucursales');
+    return;
+  }
+  try{
+    await window.saveBranchToFirestore(data);
+    closeM('m-branch');
+    toast(eid?'✅ Sucursal actualizada':'✅ Sucursal agregada');
+  }catch(err){
+    console.error('Error guardando sucursal:',err);
+    toast('❌ No se pudo guardar la sucursal');
+  }
+}
+
+function delBranch(id){
+  var b=gBranch(id);
+  confirm_('¿Eliminar "'+( b?b.name:'')+'"?',async function(){
+    if(typeof window.deleteBranchFromFirestore!=='function'){
+      toast('⚠️ Sin conexión con Firestore para eliminar');
+      return;
+    }
+    try{
+      await window.deleteBranchFromFirestore(id);
+      DB.equipment=DB.equipment.filter(function(e){return e.branchId!==id;});
+      renderEquipment();
+      toast('🗑️ Sucursal eliminada');
+    }catch(err){
+      console.error('Error eliminando sucursal:',err);
+      toast('❌ No se pudo eliminar la sucursal');
+    }
+  });
+}
 
 // ══════════════ TECHNICIANS ══════════════
 function renderTechs(){
