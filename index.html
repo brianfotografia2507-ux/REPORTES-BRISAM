@@ -2612,8 +2612,6 @@ function buildPdfHeader(doc,layout,model){
     var logoBoxY=4.8;
     var logoBoxW=62;
     var logoBoxH=15;
-    doc.setFillColor(255,255,255);
-    doc.roundedRect(logoBoxX,logoBoxY,logoBoxW,logoBoxH,1.8,1.8,'F');
     try{
       var lw=Number(logoAsset.width)||0;
       var lh=Number(logoAsset.height)||0;
@@ -2628,8 +2626,12 @@ function buildPdfHeader(doc,layout,model){
       }
       var drawX=logoBoxX+((logoBoxW-drawW)/2);
       var drawY=logoBoxY+((logoBoxH-drawH)/2);
-      var fmt=logoAsset.src.indexOf('data:image/png')===0?'PNG':'JPEG';
-      doc.addImage(logoAsset.src,fmt,drawX,drawY,drawW,drawH,undefined,'FAST');
+      // Keep original PNG alpha channel over dark/red header.
+      var fmt='PNG';
+      if(logoAsset.src.indexOf('data:image/png')!==0){
+        fmt=logoAsset.src.indexOf('data:image/webp')===0?'WEBP':'PNG';
+      }
+      doc.addImage(logoAsset.src,fmt,drawX,drawY,drawW,drawH,undefined,'MEDIUM');
     }catch(_err){
       doc.setFont('courier','bold');
       doc.setFontSize(16);
