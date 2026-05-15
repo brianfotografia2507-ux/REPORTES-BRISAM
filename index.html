@@ -2309,7 +2309,14 @@ async function resolvePdfImageSource(src){
       return '';
     }
   }
-  return '';
+  try{
+    var localResponse=await fetch(raw);
+    if(!localResponse.ok) throw new Error('HTTP '+localResponse.status);
+    var localBlob=await localResponse.blob();
+    return await blobToDataUrl(localBlob);
+  }catch(_err){
+    return '';
+  }
 }
 
 async function resolvePdfPhotos(photoList){
@@ -2344,6 +2351,26 @@ function getPdfImageDimensions(src){
     };
     img.src=src;
   });
+}
+
+var pdfBrandLogoAssetPromise=null;
+async function getPdfBrandLogoAsset(){
+  if(pdfBrandLogoAssetPromise) return pdfBrandLogoAssetPromise;
+  pdfBrandLogoAssetPromise=(async function(){
+    try{
+      var src=await resolvePdfImageSource('./assets/logo-main.png');
+      if(!src) return null;
+      var dims=await getPdfImageDimensions(src);
+      return {
+        src:src,
+        width:dims.width||0,
+        height:dims.height||0
+      };
+    }catch(_err){
+      return null;
+    }
+  })();
+  return pdfBrandLogoAssetPromise;
 }
 
 function getReportSections(reportData){
@@ -2513,19 +2540,19 @@ function buildPdfReportModel(reportData){
 }
 
 function drawPdfSectionHeading(doc,layout,y,number,title){
-  y=ensurePdfSpace(doc,y,10,layout);
+  y=ensurePdfSpace(doc,y,12,layout);
   doc.setDrawColor(226,226,222);
   doc.setLineWidth(0.22);
-  doc.line(layout.margin+18,y+1,layout.pageW-layout.margin,y+1);
+  doc.line(layout.margin+18,y+1.5,layout.pageW-layout.margin,y+1.5);
   doc.setFont('courier','bold');
   doc.setFontSize(7.5);
   doc.setTextColor(209,0,0);
-  doc.text(String(number||''),layout.margin,y+1.5);
+  doc.text(String(number||''),layout.margin,y+2.1);
   doc.setFont('helvetica','bold');
-  doc.setFontSize(9.2);
+  doc.setFontSize(9.4);
   doc.setTextColor(20,20,20);
-  doc.text(String(title||'').toUpperCase(),layout.margin+20,y+1.5);
-  return y+6;
+  doc.text(String(title||'').toUpperCase(),layout.margin+20,y+2.1);
+  return y+8.2;
 }
 
 function drawPdfFieldBox(doc,x,y,w,label,value){
@@ -2548,8 +2575,9 @@ function drawPdfFieldBox(doc,x,y,w,label,value){
 function drawPdfTextBlock(doc,layout,y,label,text,variant){
   var content=safePdfText(text,'No especificado');
   var lines=doc.splitTextToSize(content,layout.contentW-8);
-  var boxH=Math.max(13,(lines.length*4.2)+6);
-  y=ensurePdfSpace(doc,y,boxH+3,layout);
+  var lineHeight=4.8;
+  var boxH=Math.max(15,(lines.length*lineHeight)+7);
+  y=ensurePdfSpace(doc,y,boxH+4,layout);
   var fill=[247,247,245];
   var border=[187,187,181];
   if(variant==='critical'){ fill=[255,244,244]; border=[209,0,0]; }
@@ -2566,8 +2594,8 @@ function drawPdfTextBlock(doc,layout,y,label,text,variant){
   doc.setFont('helvetica','normal');
   doc.setFontSize(9.2);
   doc.setTextColor(30,30,30);
-  doc.text(lines,layout.margin+3.3,y+8.8);
-  return y+boxH+2.4;
+  doc.text(lines,layout.margin+3.3,y+9.4);
+  return y+boxH+3.2;
 }
 
 function buildPdfHeader(doc,layout,model){
@@ -2578,14 +2606,50 @@ function buildPdfHeader(doc,layout,model){
   doc.setFillColor(168,0,0);
   doc.rect(0,headH,layout.pageW,stripH,'F');
 
-  doc.setFont('courier','bold');
-  doc.setFontSize(20);
-  doc.setTextColor(255,255,255);
-  doc.text('BRISAM',layout.margin,10.8);
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(7.2);
-  doc.setTextColor(255,236,236);
-  doc.text('Servicios Integrales · RFC AEDB020529V33',layout.margin,15.5);
+  var logoAsset=model && model.brandLogo ? model.brandLogo : null;
+  if(logoAsset && logoAsset.src){
+    var logoBoxX=layout.margin;
+    var logoBoxY=4.8;
+    var logoBoxW=62;
+    var logoBoxH=15;
+    doc.setFillColor(255,255,255);
+    doc.roundedRect(logoBoxX,logoBoxY,logoBoxW,logoBoxH,1.8,1.8,'F');
+    try{
+      var lw=Number(logoAsset.width)||0;
+      var lh=Number(logoAsset.height)||0;
+      var fitW=logoBoxW-3;
+      var fitH=logoBoxH-3;
+      var drawW=fitW;
+      var drawH=fitH;
+      if(lw>0 && lh>0){
+        var ratio=Math.min(fitW/lw,fitH/lh);
+        drawW=Math.max(1,lw*ratio);
+        drawH=Math.max(1,lh*ratio);
+      }
+      var drawX=logoBoxX+((logoBoxW-drawW)/2);
+      var drawY=logoBoxY+((logoBoxH-drawH)/2);
+      var fmt=logoAsset.src.indexOf('data:image/png')===0?'PNG':'JPEG';
+      doc.addImage(logoAsset.src,fmt,drawX,drawY,drawW,drawH,undefined,'FAST');
+    }catch(_err){
+      doc.setFont('courier','bold');
+      doc.setFontSize(16);
+      doc.setTextColor(255,255,255);
+      doc.text('BRISAM',layout.margin,12);
+    }
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(255,236,236);
+    doc.text('Servicios Integrales · RFC AEDB020529V33',layout.margin,22.3);
+  }else{
+    doc.setFont('courier','bold');
+    doc.setFontSize(20);
+    doc.setTextColor(255,255,255);
+    doc.text('BRISAM',layout.margin,10.8);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(255,236,236);
+    doc.text('Servicios Integrales · RFC AEDB020529V33',layout.margin,15.5);
+  }
 
   doc.setFont('helvetica','normal');
   doc.setFontSize(7.5);
@@ -2679,23 +2743,22 @@ function buildCorrectivoGeneralInfo(doc,layout,y,model){
     {label:'Gerente en turno',value:model.gerente},
     {label:'Sucursal',value:model.sucursal},
     {label:'Técnico responsable',value:model.tecnico},
-    {label:'Folio / Orden',value:model.folio}
+    {label:'Cliente',value:model.cliente}
   ];
   for(var i=0;i<fields.length;i+=2){
-    y=ensurePdfSpace(doc,y,17.5,layout);
+    y=ensurePdfSpace(doc,y,19,layout);
     drawPdfFieldBox(doc,layout.margin,y,colW,fields[i].label,fields[i].value);
     if(fields[i+1]){
       drawPdfFieldBox(doc,layout.margin+colW+colGap,y,colW,fields[i+1].label,fields[i+1].value);
     }
-    y+=17.3;
+    y+=18.4;
   }
-  return y+1.5;
+  return y+2.2;
 }
 
-function buildCorrectivoServiceSection(doc,layout,y,model,additionalSections){
+function buildCorrectivoServiceSection(doc,layout,y,model){
   y=drawPdfSectionHeading(doc,layout,y,'03','Servicio realizado');
-  y=drawPdfTextBlock(doc,layout,y,'Detalle del servicio',model.servicio,'service');
-  return buildCorrectivoAdditionalDataInline(doc,layout,y,additionalSections);
+  return drawPdfTextBlock(doc,layout,y,'Detalle del servicio',model.servicio,'service');
 }
 
 function buildObservationsSection(doc,layout,y,model,sectionNumber){
@@ -3118,6 +3181,7 @@ async function generateGenericPdf(reportData){
   if(!JsPdf) throw new Error('jsPDF no está disponible');
 
   var model=buildPdfReportModel(reportData||{});
+  model.brandLogo=await getPdfBrandLogoAsset();
   model.photoSources=await resolvePdfPhotos(model.photos);
 
   var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
@@ -3140,18 +3204,24 @@ async function generateCorrectivoPdf(reportData){
   if(!JsPdf) throw new Error('jsPDF no está disponible');
 
   var model=buildPdfReportModel(reportData||{});
+  model.brandLogo=await getPdfBrandLogoAsset();
   model.photoSources=await resolvePdfPhotos(model.photos);
 
   var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
   var layout=createPdfLayout(doc);
-  var dynamicSections=extractAdditionalSectionsForCorrectivo(model);
   var y=buildPdfHeader(doc,layout,model);
   y=buildCorrectivoGeneralInfo(doc,layout,y,model);
+  y+=1.8;
   y=buildFailureSection(doc,layout,y,model);
-  y=buildCorrectivoServiceSection(doc,layout,y,model,dynamicSections);
+  y+=1.8;
+  y=buildCorrectivoServiceSection(doc,layout,y,model);
+  y+=1.8;
   y=buildPhotoEvidence(doc,layout,y,model,{sectionNumber:'04'});
+  y+=1.8;
   y=buildObservationsSection(doc,layout,y,model,'05');
+  y+=1.8;
   y=buildSignatures(doc,layout,y,model,{sectionNumber:'06'});
+  y+=1.8;
   y=buildLocationSection(doc,layout,y,model,'07');
 
   buildFooter(doc,layout,model);
