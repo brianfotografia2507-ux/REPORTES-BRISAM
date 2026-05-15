@@ -985,6 +985,7 @@ window.saveChecklistReportToFirestore = async function saveChecklistReportToFire
   var payload = {
     checklistId: String(data.checklistId || "").trim(),
     checklistName: String(data.checklistName || "").trim() || "Checklist",
+    folio: String(data.folio || "").trim(),
     technicianId: resolved.user.uid,
     technicianName:
       String(data.technicianName || "").trim() ||
@@ -992,11 +993,19 @@ window.saveChecklistReportToFirestore = async function saveChecklistReportToFire
       resolved.user.displayName ||
       resolved.user.email ||
       "Técnico",
+    managerName: String(data.managerName || "").trim(),
+    clienteNombre: String(data.clienteNombre || "").trim(),
+    sucursalNombre: String(data.sucursalNombre || "").trim(),
+    fallaReportada: String(data.fallaReportada || "").trim(),
+    servicioRealizado: String(data.servicioRealizado || "").trim(),
+    materiales: String(data.materiales || "").trim(),
+    observaciones: String(data.observaciones || "").trim(),
     answers: data.answers || {},
     photos: Array.isArray(data.photos) ? data.photos.filter(Boolean) : [],
     createdAt: serverTimestamp(),
     location: data.location || null,
     signatureData: data.signatureData || "",
+    managerSignatureData: data.managerSignatureData || "",
   };
   if (!payload.checklistId) {
     throw new Error("Checklist inválido para guardar reporte.");
@@ -1023,12 +1032,21 @@ window.saveReportToFirestore = async function saveReportToFirestore(reportData) 
 
   var payload = Object.assign({}, reportData || {});
   payload.uid = user.uid;
+  payload.folio = String(payload.folio || payload.ordenId || "").trim();
   payload.tecnicoNombre =
     profile.name ||
     payload.tecnicoNombre ||
     user.displayName ||
     user.email ||
     "Técnico";
+  payload.clienteNombre = String(payload.clienteNombre || "").trim();
+  payload.sucursalNombre = String(payload.sucursalNombre || "").trim();
+  payload.gerenteTurno = String(payload.gerenteTurno || "").trim();
+  payload.fallaReportada = String(payload.fallaReportada || "").trim();
+  payload.servicioRealizado = String(payload.servicioRealizado || "").trim();
+  payload.materiales = String(payload.materiales || "").trim();
+  payload.firmaTecnico = String(payload.firmaTecnico || payload.signatureData || "").trim();
+  payload.firmaGerente = String(payload.firmaGerente || "").trim();
   payload.fecha = serverTimestamp();
   payload.userEmail = user.email || "";
   payload.userRole = profile.role || "";
@@ -1357,25 +1375,41 @@ function renderReportPreviewPanel(item) {
 
   var pdfBtn = $("rp-gen-pdf");
   if (pdfBtn) {
-    pdfBtn.onclick = function () {
-      if (typeof window.createAndStoreReportPdf !== "function") {
+    pdfBtn.onclick = async function () {
+      var generator =
+        typeof window.generateBrisamServicePdf === "function"
+          ? window.generateBrisamServicePdf
+          : window.createAndStoreReportPdf;
+      if (typeof generator !== "function") {
         window.toast && window.toast("⚠️ Generador PDF no disponible");
         return;
       }
       var pdfData = {
-        ordenId: data.ordenId || item.id,
+        ordenId: data.ordenId || data.folio || item.id,
+        folio: data.folio || data.ordenId || item.id,
         fecha: asMillis(data.fecha) ? new Date(asMillis(data.fecha)) : new Date(),
+        fechaTexto: fecha,
         tecnicoNombre: data.tecnicoNombre || "",
-        clienteNombre: data.clienteNombre || "Cliente",
-        sucursalNombre: data.sucursalNombre || "Sucursal",
+        gerenteTurno: data.gerenteTurno || data.managerName || "",
+        clienteNombre: data.clienteNombre || "No especificado",
+        sucursalNombre: data.sucursalNombre || "No especificado",
         tipoMantenimiento: data.tipoMantenimiento || checklist,
-        descripcionServicio: data.observaciones || "",
-        respuestas: data.respuestas || {},
+        checklistNombre:
+          (data.checklist && data.checklist.name) || data.checklistName || checklist,
+        fallaReportada: data.fallaReportada || "",
+        servicioRealizado: data.servicioRealizado || data.descripcionServicio || "",
+        materiales: data.materiales || "",
+        observaciones: data.observaciones || "",
+        respuestas: data.respuestas || data.answers || {},
         photoPreviews: fotos,
-        signatureData: data.signatureData || "",
+        fotos: fotos,
+        signatureData: data.signatureData || data.firmaTecnico || "",
+        firmaTecnico: data.firmaTecnico || data.signatureData || "",
+        firmaGerente: data.firmaGerente || data.managerSignatureData || "",
+        ubicacion: data.ubicacion || data.location || null,
       };
       try {
-        window.createAndStoreReportPdf(pdfData);
+        await generator(pdfData);
         if (typeof window.downloadLastReportPdf === "function") {
           window.downloadLastReportPdf();
         }
