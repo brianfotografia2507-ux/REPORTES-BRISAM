@@ -2318,7 +2318,32 @@ async function resolvePdfPhotos(photoList){
   var resolved=await Promise.all(sources.slice(0,maxPhotos).map(function(src){
     return resolvePdfImageSource(src);
   }));
-  return resolved.filter(function(src){ return !!src; });
+  var sanitized=resolved.filter(function(src){ return !!src; });
+  var withMeta=await Promise.all(sanitized.map(async function(src){
+    var size=await getPdfImageDimensions(src);
+    return {
+      src:src,
+      width:size.width,
+      height:size.height
+    };
+  }));
+  return withMeta;
+}
+
+function getPdfImageDimensions(src){
+  return new Promise(function(resolve){
+    var img=new Image();
+    img.onload=function(){
+      resolve({
+        width:img.naturalWidth||img.width||0,
+        height:img.naturalHeight||img.height||0
+      });
+    };
+    img.onerror=function(){
+      resolve({width:0,height:0});
+    };
+    img.src=src;
+  });
 }
 
 function getReportSections(reportData){
@@ -2667,13 +2692,14 @@ function buildCorrectivoGeneralInfo(doc,layout,y,model){
   return y+1.5;
 }
 
-function buildCorrectivoServiceSection(doc,layout,y,model){
+function buildCorrectivoServiceSection(doc,layout,y,model,additionalSections){
   y=drawPdfSectionHeading(doc,layout,y,'03','Servicio realizado');
-  return drawPdfTextBlock(doc,layout,y,'Detalle del servicio',model.servicio,'service');
+  y=drawPdfTextBlock(doc,layout,y,'Detalle del servicio',model.servicio,'service');
+  return buildCorrectivoAdditionalDataInline(doc,layout,y,additionalSections);
 }
 
 function buildObservationsSection(doc,layout,y,model,sectionNumber){
-  y=drawPdfSectionHeading(doc,layout,y,sectionNumber||'04','Observaciones');
+  y=drawPdfSectionHeading(doc,layout,y,sectionNumber||'05','Observaciones / recomendaciones finales');
   return drawPdfTextBlock(doc,layout,y,'Notas adicionales',model.observaciones);
 }
 
@@ -2681,16 +2707,28 @@ function classifyFixedFieldKey(label){
   var normalized=normalizeLookupLabel(label);
   if(!normalized) return '';
   if(normalized.indexOf('gerente')!==-1 || normalized.indexOf('encargado')!==-1) return 'gerente';
+  if(normalized.indexOf('tecnico')!==-1) return 'tecnico';
+  if(normalized.indexOf('cliente')!==-1) return 'cliente';
   if(normalized.indexOf('sucursal')!==-1) return 'sucursal';
+  if(normalized.indexOf('folio')!==-1 || normalized.indexOf('orden')!==-1) return 'folio';
+  if(normalized.indexOf('fecha')!==-1) return 'fecha';
+  if(normalized.indexOf('hora')!==-1) return 'hora';
+  if(normalized.indexOf('dato')!==-1 || normalized.indexOf('informacion')!==-1) return 'datos';
   if(normalized.indexOf('falla')!==-1 || normalized.indexOf('problema')!==-1 || normalized.indexOf('incidencia')!==-1) return 'falla';
   if(normalized.indexOf('servicio')!==-1 || normalized.indexOf('trabajo')!==-1 || normalized.indexOf('accion')!==-1) return 'servicio';
   if(normalized.indexOf('observacion')!==-1 || normalized.indexOf('comentario')!==-1 || normalized.indexOf('recomendacion')!==-1) return 'observaciones';
   if(normalized.indexOf('firma gerente')!==-1 || normalized.indexOf('firma del gerente')!==-1) return 'firmaGerente';
+  if(normalized.indexOf('ubicacion')!==-1 || normalized.indexOf('maps')!==-1 || normalized.indexOf('coordenada')!==-1) return 'ubicacion';
   return '';
 }
 
 function classifyFixedTextareaKey(title){
   return classifyFixedFieldKey(title);
+}
+
+function isIgnorableCorrectivoText(value){
+  var key=classifyFixedFieldKey(value);
+  return !!key;
 }
 
 function extractAdditionalSectionsForCorrectivo(model){
@@ -2701,9 +2739,9 @@ function extractAdditionalSectionsForCorrectivo(model){
     if(sec.type==='fields'){
       var fields=(Array.isArray(sec.fields)?sec.fields:[]).filter(function(field){
         if(!field) return false;
-        var hasValue=String(field.value||'').trim() || String(field.label||'').trim();
+        var hasValue=String(field.value||'').trim();
         if(!hasValue) return false;
-        return !classifyFixedFieldKey(field.label);
+        return !isIgnorableCorrectivoText(field.label);
       });
       if(fields.length){
         additional.push({
@@ -2718,20 +2756,74 @@ function extractAdditionalSectionsForCorrectivo(model){
     if(sec.type==='textarea'){
       var value=String(sec.value||'').trim();
       if(!value) return;
-      if(classifyFixedTextareaKey(sec.title)) return;
+      if(isIgnorableCorrectivoText(sec.title)) return;
       additional.push(sec);
       return;
     }
     if(sec.type==='checklist'){
-      var items=Array.isArray(sec.items)?sec.items:[];
+      if(isIgnorableCorrectivoText(sec.title)) return;
+      var items=(Array.isArray(sec.items)?sec.items:[]).filter(function(item){
+        if(!item) return false;
+        return !isIgnorableCorrectivoText(item.text);
+      });
       if(!items.length) return;
-      if(classifyFixedFieldKey(sec.title)) return;
-      additional.push(sec);
+      additional.push({
+        id:sec.id,
+        type:'checklist',
+        title:sec.title,
+        items:items
+      });
       return;
     }
     additional.push(sec);
   });
   return additional;
+}
+
+function buildCorrectivoAdditionalDataInline(doc,layout,y,sections){
+  if(!Array.isArray(sections) || !sections.length) return y;
+  y=ensurePdfSpace(doc,y,9,layout);
+  doc.setFont('courier','normal');
+  doc.setFontSize(6.9);
+  doc.setTextColor(138,138,133);
+  doc.text('DATOS ADICIONALES DEL CHECKLIST',layout.margin,y+2.8);
+  y+=5.5;
+  sections.forEach(function(sec){
+    if(sec.type==='fields'){
+      (sec.fields||[]).forEach(function(field){
+        y=ensurePdfSpace(doc,y,11,layout);
+        doc.setDrawColor(238,238,235);
+        doc.roundedRect(layout.margin,y,layout.contentW,10.2,1,1);
+        doc.setFont('courier','normal');
+        doc.setFontSize(6.2);
+        doc.setTextColor(138,138,133);
+        doc.text(safePdfText(field.label,'Campo'),layout.margin+2.2,y+3.4);
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(8.4);
+        doc.setTextColor(20,20,20);
+        var lines=doc.splitTextToSize(safePdfText(field.value,'No especificado'),layout.contentW-4.4);
+        doc.text(lines.slice(0,2),layout.margin+2.2,y+7.4);
+        y+=11.1;
+      });
+      return;
+    }
+    if(sec.type==='textarea'){
+      y=drawPdfTextBlock(doc,layout,y,safePdfText(sec.title,'Dato adicional'),safePdfText(sec.value,'No especificado'));
+      return;
+    }
+    if(sec.type==='checklist'){
+      var done=(sec.items||[]).filter(function(item){ return !!(item&&item.checked); }).length;
+      y=drawPdfTextBlock(
+        doc,
+        layout,
+        y,
+        safePdfText(sec.title,'Checklist adicional'),
+        'Actividades registradas: '+done+' de '+(sec.items||[]).length
+      );
+      return;
+    }
+  });
+  return y;
 }
 
 function buildLocationSection(doc,layout,y,model,sectionNumber){
@@ -2865,11 +2957,12 @@ function buildPhotoEvidence(doc,layout,y,model,options){
     y=drawPdfTextBlock(doc,layout,y,'Evidencia','Sin evidencia fotográfica');
     return y;
   }
-  var cols=3;
-  var gap=4;
+  var total=model.photoSources.length;
+  var cols=total===1?1:2;
+  var gap=5;
   var photoW=(layout.contentW-(gap*(cols-1)))/cols;
-  var photoH=35;
-  model.photoSources.forEach(function(src,idx){
+  var photoH=cols===1?108:(total<=2?74:66);
+  model.photoSources.forEach(function(entry,idx){
     if(idx%cols===0){
       y=ensurePdfSpace(doc,y,photoH+8,layout);
     }
@@ -2880,8 +2973,24 @@ function buildPhotoEvidence(doc,layout,y,model,options){
     doc.setDrawColor(226,226,222);
     doc.rect(x,rowY,photoW,photoH,'FD');
     try{
-      var fmt=String(src).indexOf('data:image/png')===0?'PNG':'JPEG';
-      doc.addImage(src,fmt,x+0.8,rowY+0.8,photoW-1.6,photoH-5.8,undefined,'FAST');
+      var src=typeof entry==='string'?entry:String(entry&&entry.src||'');
+      var fmt=src.indexOf('data:image/png')===0?'PNG':'JPEG';
+      var originalW=Number(entry&&entry.width)||0;
+      var originalH=Number(entry&&entry.height)||0;
+      var fitBoxX=x+1.2;
+      var fitBoxY=rowY+1.2;
+      var fitBoxW=photoW-2.4;
+      var fitBoxH=photoH-7.2;
+      var drawW=fitBoxW;
+      var drawH=fitBoxH;
+      if(originalW>0 && originalH>0){
+        var ratio=Math.min(fitBoxW/originalW,fitBoxH/originalH);
+        drawW=Math.max(1,originalW*ratio);
+        drawH=Math.max(1,originalH*ratio);
+      }
+      var drawX=fitBoxX+((fitBoxW-drawW)/2);
+      var drawY=fitBoxY+((fitBoxH-drawH)/2);
+      doc.addImage(src,fmt,drawX,drawY,drawW,drawH,undefined,'FAST');
     }catch(err){
       console.warn('No se pudo renderizar evidencia en PDF:',err);
       doc.setFont('helvetica','normal');
@@ -3035,34 +3144,15 @@ async function generateCorrectivoPdf(reportData){
 
   var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
   var layout=createPdfLayout(doc);
+  var dynamicSections=extractAdditionalSectionsForCorrectivo(model);
   var y=buildPdfHeader(doc,layout,model);
   y=buildCorrectivoGeneralInfo(doc,layout,y,model);
   y=buildFailureSection(doc,layout,y,model);
-  y=buildCorrectivoServiceSection(doc,layout,y,model);
-  y=buildObservationsSection(doc,layout,y,model,'04');
-
-  var dynamicSections=extractAdditionalSectionsForCorrectivo(model);
-  var sectionNumber=5;
-  if(dynamicSections.length){
-    y=buildChecklistSections(
-      doc,
-      layout,
-      y,
-      {sections:dynamicSections},
-      {
-        sectionNumber:formatPdfSectionNumber(sectionNumber),
-        sectionTitle:'Checklist dinámico adicional',
-        emptyText:'Sin campos adicionales.'
-      }
-    );
-    sectionNumber+=1;
-  }
-
-  y=buildPhotoEvidence(doc,layout,y,model,{sectionNumber:formatPdfSectionNumber(sectionNumber)});
-  sectionNumber+=1;
-  y=buildSignatures(doc,layout,y,model,{sectionNumber:formatPdfSectionNumber(sectionNumber)});
-  sectionNumber+=1;
-  y=buildLocationSection(doc,layout,y,model,formatPdfSectionNumber(sectionNumber));
+  y=buildCorrectivoServiceSection(doc,layout,y,model,dynamicSections);
+  y=buildPhotoEvidence(doc,layout,y,model,{sectionNumber:'04'});
+  y=buildObservationsSection(doc,layout,y,model,'05');
+  y=buildSignatures(doc,layout,y,model,{sectionNumber:'06'});
+  y=buildLocationSection(doc,layout,y,model,'07');
 
   buildFooter(doc,layout,model);
   return storeGeneratedPdf(doc,model);
@@ -3248,17 +3338,18 @@ function findChecklistAnswerValue(respuestas,keywords){
 }
 
 function extractBrisamReportMeta(respuestas,defaultObservaciones){
-  var textareaNotes=[];
-  var sections=(respuestas && Array.isArray(respuestas.sections))?respuestas.sections:[];
-  sections.forEach(function(sec){
-    if(sec.type==='textarea' && String(sec.value||'').trim()){
-      textareaNotes.push(String(sec.title||'Observaciones').trim()+': '+String(sec.value||'').trim());
-    }
-  });
-  var mergedObservaciones=String(defaultObservaciones||'').trim();
-  if(!mergedObservaciones && textareaNotes.length){
-    mergedObservaciones=textareaNotes.join('\n\n');
-  }
+  var explicitObservaciones=findChecklistAnswerValue(
+    respuestas,
+    [
+      'observaciones',
+      'observaciones finales',
+      'notas adicionales',
+      'notas finales',
+      'recomendaciones',
+      'recomendaciones finales',
+      'comentarios finales'
+    ]
+  );
   return {
     gerente:findChecklistAnswerValue(respuestas,['gerente','encargado']),
     cliente:findChecklistAnswerValue(respuestas,['cliente']),
@@ -3266,7 +3357,7 @@ function extractBrisamReportMeta(respuestas,defaultObservaciones){
     falla:findChecklistAnswerValue(respuestas,['falla','problema reportado','incidencia']),
     servicio:findChecklistAnswerValue(respuestas,['servicio realizado','trabajos ejecutados','acciones realizadas','actividad realizada']),
     materiales:findChecklistAnswerValue(respuestas,['material','refaccion','insumo']),
-    observaciones:mergedObservaciones,
+    observaciones:String(explicitObservaciones||'').trim(),
     firmaGerente:findChecklistAnswerValue(respuestas,['firma gerente','firma del gerente'])
   };
 }
@@ -3311,6 +3402,11 @@ async function closeOrder(){
     checklistType:ck&&ck.type,
     tipoMantenimiento:!isFree&&o?o.type:''
   });
+  var isCorrectivoTemplate=checklistTemplateType==='correctivo';
+  var finalObservaciones=isCorrectivoTemplate
+    ? (reportMeta.observaciones||'')
+    : (reportMeta.observaciones||captured.observaciones||(!isFree&&o?o.desc:'')||'');
+  var finalServicio=reportMeta.servicio||(!isFree&&o?o.desc:'');
   try{
     var locationData=await getTabletLocationForReport();
     if(!locationData || typeof locationData.lat!=='number' || typeof locationData.lng!=='number'){
@@ -3348,9 +3444,9 @@ async function closeOrder(){
         technicianName:tc?tc.name:'',
         managerName:reportMeta.gerente||'',
         answers:captured.respuestas,
-        observaciones:reportMeta.observaciones||'',
+        observaciones:finalObservaciones,
         fallaReportada:reportMeta.falla||'',
-        servicioRealizado:reportMeta.servicio||'',
+        servicioRealizado:finalServicio||'',
         photos:urls,
         location:{
           lat:locationData.lat,
@@ -3382,10 +3478,10 @@ async function closeOrder(){
         templateType:checklistTemplateType,
         tipoMantenimiento:o.type||'',
         fallaReportada:reportMeta.falla||'',
-        servicioRealizado:reportMeta.servicio||'',
+        servicioRealizado:finalServicio||'',
         materiales:reportMeta.materiales||'',
         respuestas:captured.respuestas,
-        observaciones:reportMeta.observaciones||captured.observaciones||o.desc||'',
+        observaciones:finalObservaciones,
         firmaTecnico:signatureData,
         firmaGerente:reportMeta.firmaGerente||'',
         fotos:urls,
@@ -3422,9 +3518,9 @@ async function closeOrder(){
         checklistType:ck?ck.type:'',
         templateType:checklistTemplateType,
         fallaReportada:reportMeta.falla||'',
-        servicioRealizado:reportMeta.servicio||reportMeta.observaciones||captured.observaciones||(!isFree&&o?o.desc:''),
+        servicioRealizado:finalServicio||'',
         materiales:reportMeta.materiales||'',
-        observaciones:reportMeta.observaciones||'',
+        observaciones:finalObservaciones,
         respuestas:captured.respuestas,
         photoPreviews:photoPreviews,
         fotos:urls,
