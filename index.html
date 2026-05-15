@@ -2341,6 +2341,30 @@ function normalizeLookupLabel(value){
     .replace(/[\u0300-\u036f]/g,'');
 }
 
+function normalizeTemplateType(value){
+  var raw=String(value||'').trim().toLowerCase();
+  if(raw==='correctivo') return 'correctivo';
+  if(raw==='generic' || raw==='generico' || raw==='genérico') return 'generic';
+  return '';
+}
+
+function resolvePdfTemplateType(reportData){
+  var source=reportData||{};
+  var direct=normalizeTemplateType(
+    source.templateType ||
+    source.checklistTemplateType ||
+    (source.checklist && source.checklist.templateType)
+  );
+  if(direct) return direct;
+  var hint=normalizeLookupLabel(
+    String(source.checklistNombre || source.checklistName || (source.checklist && source.checklist.name) || '')+
+    ' '+
+    String(source.checklistType || source.tipoMantenimiento || '')
+  );
+  if(hint.indexOf('correctivo')!==-1) return 'correctivo';
+  return 'generic';
+}
+
 function findSectionValueByKeywords(sections,keywords){
   if(!Array.isArray(sections) || !sections.length) return '';
   var terms=(keywords||[]).map(normalizeLookupLabel);
@@ -2402,9 +2426,18 @@ function formatGpsLabel(locationData){
   return addr || 'No especificado';
 }
 
+function buildGoogleMapsUrl(locationData){
+  if(!locationData || typeof locationData!=='object') return '';
+  var lat=Number(locationData.lat);
+  var lng=Number(locationData.lng);
+  if(!isFinite(lat) || !isFinite(lng)) return '';
+  return 'https://www.google.com/maps?q='+encodeURIComponent(String(lat)+','+String(lng));
+}
+
 function buildPdfReportModel(reportData){
   var source=reportData||{};
   var sections=getReportSections(source);
+  var locationData=source.ubicacion||source.location||source.gps||null;
   var mergedPhotos=[]
     .concat(Array.isArray(source.photoPreviews)?source.photoPreviews:[])
     .concat(Array.isArray(source.fotos)?source.fotos:[])
@@ -2443,7 +2476,9 @@ function buildPdfReportModel(reportData){
     servicio:safePdfText(source.servicioRealizado||source.servicio||source.descripcionServicio||servicioFallback,'No especificado'),
     materiales:safePdfText(source.materiales||materialesFallback,'No especificado'),
     observaciones:safePdfText(source.observaciones||obsFallback,'No especificado'),
-    gps:safePdfText(source.gpsLabel||formatGpsLabel(source.ubicacion||source.location||source.gps),'No especificado'),
+    gps:safePdfText(source.gpsLabel||formatGpsLabel(locationData),'No especificado'),
+    googleMapsUrl:buildGoogleMapsUrl(locationData),
+    templateType:resolvePdfTemplateType(source),
     checklistName:safePdfText(source.checklistNombre||source.checklistName,'Checklist de servicio'),
     sections:sections,
     photos:uniquePhotos,
@@ -2611,10 +2646,136 @@ function buildServiceSection(doc,layout,y,model){
   return y;
 }
 
-function buildChecklistSections(doc,layout,y,model){
-  y=drawPdfSectionHeading(doc,layout,y,'04','Checklist dinámico');
+function buildCorrectivoGeneralInfo(doc,layout,y,model){
+  y=drawPdfSectionHeading(doc,layout,y,'01','Datos del servicio');
+  var colGap=5;
+  var colW=(layout.contentW-colGap)/2;
+  var fields=[
+    {label:'Gerente en turno',value:model.gerente},
+    {label:'Sucursal',value:model.sucursal},
+    {label:'Técnico responsable',value:model.tecnico},
+    {label:'Folio / Orden',value:model.folio}
+  ];
+  for(var i=0;i<fields.length;i+=2){
+    y=ensurePdfSpace(doc,y,17.5,layout);
+    drawPdfFieldBox(doc,layout.margin,y,colW,fields[i].label,fields[i].value);
+    if(fields[i+1]){
+      drawPdfFieldBox(doc,layout.margin+colW+colGap,y,colW,fields[i+1].label,fields[i+1].value);
+    }
+    y+=17.3;
+  }
+  return y+1.5;
+}
+
+function buildCorrectivoServiceSection(doc,layout,y,model){
+  y=drawPdfSectionHeading(doc,layout,y,'03','Servicio realizado');
+  return drawPdfTextBlock(doc,layout,y,'Detalle del servicio',model.servicio,'service');
+}
+
+function buildObservationsSection(doc,layout,y,model,sectionNumber){
+  y=drawPdfSectionHeading(doc,layout,y,sectionNumber||'04','Observaciones');
+  return drawPdfTextBlock(doc,layout,y,'Notas adicionales',model.observaciones);
+}
+
+function classifyFixedFieldKey(label){
+  var normalized=normalizeLookupLabel(label);
+  if(!normalized) return '';
+  if(normalized.indexOf('gerente')!==-1 || normalized.indexOf('encargado')!==-1) return 'gerente';
+  if(normalized.indexOf('sucursal')!==-1) return 'sucursal';
+  if(normalized.indexOf('falla')!==-1 || normalized.indexOf('problema')!==-1 || normalized.indexOf('incidencia')!==-1) return 'falla';
+  if(normalized.indexOf('servicio')!==-1 || normalized.indexOf('trabajo')!==-1 || normalized.indexOf('accion')!==-1) return 'servicio';
+  if(normalized.indexOf('observacion')!==-1 || normalized.indexOf('comentario')!==-1 || normalized.indexOf('recomendacion')!==-1) return 'observaciones';
+  if(normalized.indexOf('firma gerente')!==-1 || normalized.indexOf('firma del gerente')!==-1) return 'firmaGerente';
+  return '';
+}
+
+function classifyFixedTextareaKey(title){
+  return classifyFixedFieldKey(title);
+}
+
+function extractAdditionalSectionsForCorrectivo(model){
+  var sections=Array.isArray(model && model.sections)?model.sections:[];
+  var additional=[];
+  sections.forEach(function(sec){
+    if(!sec || typeof sec!=='object') return;
+    if(sec.type==='fields'){
+      var fields=(Array.isArray(sec.fields)?sec.fields:[]).filter(function(field){
+        if(!field) return false;
+        var hasValue=String(field.value||'').trim() || String(field.label||'').trim();
+        if(!hasValue) return false;
+        return !classifyFixedFieldKey(field.label);
+      });
+      if(fields.length){
+        additional.push({
+          id:sec.id,
+          type:'fields',
+          title:sec.title,
+          fields:fields
+        });
+      }
+      return;
+    }
+    if(sec.type==='textarea'){
+      var value=String(sec.value||'').trim();
+      if(!value) return;
+      if(classifyFixedTextareaKey(sec.title)) return;
+      additional.push(sec);
+      return;
+    }
+    if(sec.type==='checklist'){
+      var items=Array.isArray(sec.items)?sec.items:[];
+      if(!items.length) return;
+      if(classifyFixedFieldKey(sec.title)) return;
+      additional.push(sec);
+      return;
+    }
+    additional.push(sec);
+  });
+  return additional;
+}
+
+function buildLocationSection(doc,layout,y,model,sectionNumber){
+  y=drawPdfSectionHeading(doc,layout,y,sectionNumber||'07','Ubicación del servicio');
+  y=drawPdfTextBlock(doc,layout,y,'Coordenadas / precisión',model.gps);
+  if(!model.googleMapsUrl) return y;
+  y=ensurePdfSpace(doc,y,16,layout);
+  doc.setDrawColor(232,232,228);
+  doc.setFillColor(247,247,245);
+  doc.roundedRect(layout.margin,y,layout.contentW,13,1.2,1.2,'FD');
+  doc.setFont('courier','normal');
+  doc.setFontSize(6.6);
+  doc.setTextColor(138,138,133);
+  doc.text('MAPA / ENLACE',layout.margin+2.4,y+3.8);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(8.9);
+  doc.setTextColor(26,115,232);
+  var linkLabel='Abrir ubicación en Google Maps';
+  var linkX=layout.margin+2.4;
+  var linkY=y+8.4;
+  if(typeof doc.textWithLink==='function'){
+    doc.textWithLink(linkLabel,linkX,linkY,{url:model.googleMapsUrl});
+  }else{
+    doc.text(linkLabel,linkX,linkY);
+    if(typeof doc.link==='function'){
+      doc.link(linkX,linkY-3,doc.getTextWidth(linkLabel),4,{url:model.googleMapsUrl});
+    }
+  }
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(7.2);
+  doc.setTextColor(120,120,120);
+  var urlLines=doc.splitTextToSize(model.googleMapsUrl,layout.contentW-4.8);
+  doc.text(urlLines.slice(0,1),layout.margin+2.4,y+11.4);
+  return y+15.5;
+}
+
+function buildChecklistSections(doc,layout,y,model,options){
+  var opts=options||{};
+  var sectionNumber=opts.sectionNumber||'04';
+  var sectionTitle=opts.sectionTitle||'Checklist dinámico';
+  var emptyText=opts.emptyText||'Sin checklist registrado para este reporte.';
+  y=drawPdfSectionHeading(doc,layout,y,sectionNumber,sectionTitle);
   if(!Array.isArray(model.sections) || !model.sections.length){
-    return drawPdfTextBlock(doc,layout,y,'Checklist','Sin checklist registrado para este reporte.');
+    return drawPdfTextBlock(doc,layout,y,'Checklist',emptyText);
   }
   model.sections.forEach(function(sec,secIndex){
     var sectionTitle=safePdfText(sec && sec.title ? sec.title : ('Sección '+(secIndex+1)),'Sección');
@@ -2697,8 +2858,9 @@ function buildChecklistSections(doc,layout,y,model){
   return y+1;
 }
 
-function buildPhotoEvidence(doc,layout,y,model){
-  y=drawPdfSectionHeading(doc,layout,y,'05','Evidencia fotográfica');
+function buildPhotoEvidence(doc,layout,y,model,options){
+  var opts=options||{};
+  y=drawPdfSectionHeading(doc,layout,y,opts.sectionNumber||'05',opts.sectionTitle||'Evidencia fotográfica');
   if(!Array.isArray(model.photoSources) || !model.photoSources.length){
     y=drawPdfTextBlock(doc,layout,y,'Evidencia','Sin evidencia fotográfica');
     return y;
@@ -2744,8 +2906,9 @@ function buildPhotoEvidence(doc,layout,y,model){
   return y+2;
 }
 
-function buildSignatures(doc,layout,y,model){
-  y=drawPdfSectionHeading(doc,layout,y,'06','Firmas de conformidad');
+function buildSignatures(doc,layout,y,model,options){
+  var opts=options||{};
+  y=drawPdfSectionHeading(doc,layout,y,opts.sectionNumber||'06',opts.sectionTitle||'Firmas de conformidad');
   y=ensurePdfSpace(doc,y,49,layout);
   var gap=6;
   var colW=(layout.contentW-gap)/2;
@@ -2817,14 +2980,11 @@ function buildFooter(doc,layout,model){
   }
 }
 
-async function generateBrisamServicePdf(reportData){
-  var JsPdf=getJsPdfCtor();
-  if(!JsPdf) throw new Error('jsPDF no está disponible');
+function formatPdfSectionNumber(value){
+  return String(value).padStart(2,'0');
+}
 
-  var model=buildPdfReportModel(reportData||{});
-  model.photoSources=await resolvePdfPhotos(model.photos);
-
-  var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
+function createPdfLayout(doc){
   var layout={
     pageW:doc.internal.pageSize.getWidth(),
     pageH:doc.internal.pageSize.getHeight(),
@@ -2833,6 +2993,26 @@ async function generateBrisamServicePdf(reportData){
     footerH:12
   };
   layout.contentW=layout.pageW-(layout.margin*2);
+  return layout;
+}
+
+function storeGeneratedPdf(doc,model){
+  var blob=doc.output('blob');
+  if(lastGeneratedPdfUrl){ URL.revokeObjectURL(lastGeneratedPdfUrl); }
+  lastGeneratedPdfUrl=URL.createObjectURL(blob);
+  lastGeneratedPdfName='Reporte-BRISAM-'+model.folio+'-'+fileSafeStamp(model.generatedAt)+'.pdf';
+  return {url:lastGeneratedPdfUrl,name:lastGeneratedPdfName};
+}
+
+async function generateGenericPdf(reportData){
+  var JsPdf=getJsPdfCtor();
+  if(!JsPdf) throw new Error('jsPDF no está disponible');
+
+  var model=buildPdfReportModel(reportData||{});
+  model.photoSources=await resolvePdfPhotos(model.photos);
+
+  var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
+  var layout=createPdfLayout(doc);
 
   var y=buildPdfHeader(doc,layout,model);
   y=buildGeneralInfo(doc,layout,y,model);
@@ -2843,12 +3023,57 @@ async function generateBrisamServicePdf(reportData){
   y=buildSignatures(doc,layout,y,model);
 
   buildFooter(doc,layout,model);
+  return storeGeneratedPdf(doc,model);
+}
 
-  var blob=doc.output('blob');
-  if(lastGeneratedPdfUrl){ URL.revokeObjectURL(lastGeneratedPdfUrl); }
-  lastGeneratedPdfUrl=URL.createObjectURL(blob);
-  lastGeneratedPdfName='Reporte-BRISAM-'+model.folio+'-'+fileSafeStamp(model.generatedAt)+'.pdf';
-  return {url:lastGeneratedPdfUrl,name:lastGeneratedPdfName};
+async function generateCorrectivoPdf(reportData){
+  var JsPdf=getJsPdfCtor();
+  if(!JsPdf) throw new Error('jsPDF no está disponible');
+
+  var model=buildPdfReportModel(reportData||{});
+  model.photoSources=await resolvePdfPhotos(model.photos);
+
+  var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
+  var layout=createPdfLayout(doc);
+  var y=buildPdfHeader(doc,layout,model);
+  y=buildCorrectivoGeneralInfo(doc,layout,y,model);
+  y=buildFailureSection(doc,layout,y,model);
+  y=buildCorrectivoServiceSection(doc,layout,y,model);
+  y=buildObservationsSection(doc,layout,y,model,'04');
+
+  var dynamicSections=extractAdditionalSectionsForCorrectivo(model);
+  var sectionNumber=5;
+  if(dynamicSections.length){
+    y=buildChecklistSections(
+      doc,
+      layout,
+      y,
+      {sections:dynamicSections},
+      {
+        sectionNumber:formatPdfSectionNumber(sectionNumber),
+        sectionTitle:'Checklist dinámico adicional',
+        emptyText:'Sin campos adicionales.'
+      }
+    );
+    sectionNumber+=1;
+  }
+
+  y=buildPhotoEvidence(doc,layout,y,model,{sectionNumber:formatPdfSectionNumber(sectionNumber)});
+  sectionNumber+=1;
+  y=buildSignatures(doc,layout,y,model,{sectionNumber:formatPdfSectionNumber(sectionNumber)});
+  sectionNumber+=1;
+  y=buildLocationSection(doc,layout,y,model,formatPdfSectionNumber(sectionNumber));
+
+  buildFooter(doc,layout,model);
+  return storeGeneratedPdf(doc,model);
+}
+
+async function generateBrisamServicePdf(reportData){
+  var model=buildPdfReportModel(reportData||{});
+  if(model.templateType==='correctivo'){
+    return generateCorrectivoPdf(reportData||{});
+  }
+  return generateGenericPdf(reportData||{});
 }
 
 async function createAndStoreReportPdf(pdfData){
@@ -3080,6 +3305,12 @@ async function closeOrder(){
   var reportMeta=extractBrisamReportMeta(captured.respuestas,captured.observaciones||(!isFree&&o?o.desc:''));
   var signatureData=document.getElementById('sig-c').toDataURL('image/png');
   var reportFolio=isFree?generatedFolio:o.id;
+  var checklistTemplateType=resolvePdfTemplateType({
+    templateType:ck&&ck.templateType,
+    checklistNombre:ck&&ck.name,
+    checklistType:ck&&ck.type,
+    tipoMantenimiento:!isFree&&o?o.type:''
+  });
   try{
     var locationData=await getTabletLocationForReport();
     if(!locationData || typeof locationData.lat!=='number' || typeof locationData.lng!=='number'){
@@ -3111,6 +3342,9 @@ async function closeOrder(){
       await window.saveChecklistReportToFirestore({
         checklistId:ck.id,
         checklistName:ck.name,
+        checklistType:ck.type||'',
+        templateType:checklistTemplateType,
+        folio:reportFolio,
         technicianName:tc?tc.name:'',
         managerName:reportMeta.gerente||'',
         answers:captured.respuestas,
@@ -3144,6 +3378,8 @@ async function closeOrder(){
         gerenteTurno:reportMeta.gerente||'',
         checklist:{id:o.clId,name:ck?ck.name:'—'},
         checklistNombre:ck?ck.name:'—',
+        checklistType:ck?ck.type:'',
+        templateType:checklistTemplateType,
         tipoMantenimiento:o.type||'',
         fallaReportada:reportMeta.falla||'',
         servicioRealizado:reportMeta.servicio||'',
@@ -3183,6 +3419,8 @@ async function closeOrder(){
         sucursalNombre:isFree?(reportMeta.sucursal||'No especificado'):(br?br.name:(reportMeta.sucursal||'No especificado')),
         tipoMantenimiento:isFree?('Checklist libre · '+(ck?ck.type:'General')):(o.type||'—'),
         checklistNombre:ck?ck.name:'—',
+        checklistType:ck?ck.type:'',
+        templateType:checklistTemplateType,
         fallaReportada:reportMeta.falla||'',
         servicioRealizado:reportMeta.servicio||reportMeta.observaciones||captured.observaciones||(!isFree&&o?o.desc:''),
         materiales:reportMeta.materiales||'',

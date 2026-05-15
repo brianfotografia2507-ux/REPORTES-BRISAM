@@ -603,10 +603,13 @@ function emitChecklistDocs(checklistDocs) {
 
 function mapChecklistDoc(snap) {
   var data = (snap && typeof snap.data === "function" ? snap.data() : {}) || {};
+  var name = String(data.name || "").trim();
+  var type = String(data.type || "General");
   return {
     id: snap.id,
-    name: String(data.name || "").trim(),
-    type: String(data.type || "General"),
+    name: name,
+    type: type,
+    templateType: normalizeChecklistTemplateType(data.templateType, name, type),
     published: data.published === true,
     sections: Array.isArray(data.sections) ? data.sections : [],
     createdAt: data.createdAt || null,
@@ -626,6 +629,23 @@ function startChecklistSubscription(role) {
       var docs = [];
       snap.forEach(function (item) {
         docs.push(mapChecklistDoc(item));
+        if (role === "administrador") {
+          var raw = (item && typeof item.data === "function" ? item.data() : {}) || {};
+          var inferred = normalizeChecklistTemplateType(
+            raw.templateType,
+            raw.name,
+            raw.type
+          );
+          if (!raw.templateType && inferred === "correctivo") {
+            setDoc(
+              doc(db, "checklists", item.id),
+              { templateType: "correctivo", updatedAt: serverTimestamp() },
+              { merge: true }
+            ).catch(function (err) {
+              console.warn("No se pudo backfillear templateType correctivo:", err);
+            });
+          }
+        }
       });
       emitChecklistDocs(docs);
     },
@@ -909,6 +929,19 @@ function cloneChecklistSections(sections) {
   }
 }
 
+function normalizeChecklistTemplateType(value, checklistName, checklistType) {
+  var raw = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (raw === "correctivo") return "correctivo";
+  if (raw === "generic" || raw === "generico" || raw === "genérico")
+    return "generic";
+  var hint =
+    (String(checklistName || "") + " " + String(checklistType || "")).toLowerCase();
+  if (hint.indexOf("correctivo") !== -1) return "correctivo";
+  return "generic";
+}
+
 window.saveChecklistToFirestore = async function saveChecklistToFirestore(checklistData) {
   if (!firebaseAvailable || !db) {
     throw new Error("Firebase no está disponible.");
@@ -923,6 +956,11 @@ window.saveChecklistToFirestore = async function saveChecklistToFirestore(checkl
   var data = {
     name: name,
     type: String(payload.type || "General").trim() || "General",
+    templateType: normalizeChecklistTemplateType(
+      payload.templateType,
+      name,
+      payload.type
+    ),
     published: payload.published === true,
     sections: cloneChecklistSections(payload.sections),
     updatedAt: serverTimestamp(),
@@ -985,6 +1023,12 @@ window.saveChecklistReportToFirestore = async function saveChecklistReportToFire
   var payload = {
     checklistId: String(data.checklistId || "").trim(),
     checklistName: String(data.checklistName || "").trim() || "Checklist",
+    templateType: normalizeChecklistTemplateType(
+      data.templateType,
+      data.checklistName,
+      data.checklistType
+    ),
+    checklistType: String(data.checklistType || "").trim(),
     folio: String(data.folio || "").trim(),
     technicianId: resolved.user.uid,
     technicianName:
@@ -1032,6 +1076,12 @@ window.saveReportToFirestore = async function saveReportToFirestore(reportData) 
 
   var payload = Object.assign({}, reportData || {});
   payload.uid = user.uid;
+  payload.templateType = normalizeChecklistTemplateType(
+    payload.templateType,
+    payload.checklistNombre || payload.checklistName,
+    payload.checklistType || payload.tipoMantenimiento
+  );
+  payload.checklistType = String(payload.checklistType || "").trim();
   payload.folio = String(payload.folio || payload.ordenId || "").trim();
   payload.tecnicoNombre =
     profile.name ||
@@ -1394,6 +1444,8 @@ function renderReportPreviewPanel(item) {
         clienteNombre: data.clienteNombre || "No especificado",
         sucursalNombre: data.sucursalNombre || "No especificado",
         tipoMantenimiento: data.tipoMantenimiento || checklist,
+        checklistType: data.checklistType || "",
+        templateType: data.templateType || data.checklistTemplateType || "",
         checklistNombre:
           (data.checklist && data.checklist.name) || data.checklistName || checklist,
         fallaReportada: data.fallaReportada || "",
