@@ -2519,14 +2519,97 @@ function clearSignatureModalCanvas(){
   signatureModalPad.clear();
 }
 
-function saveSignatureModal(){
+function normalizeSavedSignatureDataUrl(dataUrl){
+  var src=String(dataUrl||'').trim();
+  if(!src) return Promise.resolve('');
+  return new Promise(function(resolve){
+    var img=new Image();
+    img.onload=function(){
+      try{
+        var sourceW=Math.max(1,img.naturalWidth||img.width||1);
+        var sourceH=Math.max(1,img.naturalHeight||img.height||1);
+        var srcCanvas=document.createElement('canvas');
+        srcCanvas.width=sourceW;
+        srcCanvas.height=sourceH;
+        var srcCtx=srcCanvas.getContext('2d');
+        srcCtx.drawImage(img,0,0,sourceW,sourceH);
+        var px=srcCtx.getImageData(0,0,sourceW,sourceH).data;
+        var minX=sourceW,minY=sourceH,maxX=-1,maxY=-1;
+        for(var y=0;y<sourceH;y++){
+          for(var x=0;x<sourceW;x++){
+            var idx=((y*sourceW)+x)*4;
+            var alpha=px[idx+3];
+            if(alpha>8){
+              if(x<minX) minX=x;
+              if(y<minY) minY=y;
+              if(x>maxX) maxX=x;
+              if(y>maxY) maxY=y;
+            }
+          }
+        }
+        if(maxX<0 || maxY<0){
+          resolve(src);
+          return;
+        }
+        var boxW=maxX-minX+1;
+        var boxH=maxY-minY+1;
+        if(boxW<2 || boxH<2){
+          resolve(src);
+          return;
+        }
+        var padding=Math.max(8,Math.round(Math.max(boxW,boxH)*0.12));
+        var cropX=Math.max(0,minX-padding);
+        var cropY=Math.max(0,minY-padding);
+        var cropRight=Math.min(sourceW,maxX+padding+1);
+        var cropBottom=Math.min(sourceH,maxY+padding+1);
+        var cropW=Math.max(1,cropRight-cropX);
+        var cropH=Math.max(1,cropBottom-cropY);
+
+        var outCanvas=document.createElement('canvas');
+        outCanvas.width=sourceW;
+        outCanvas.height=sourceH;
+        var outCtx=outCanvas.getContext('2d');
+        outCtx.clearRect(0,0,sourceW,sourceH);
+        outCtx.imageSmoothingEnabled=true;
+        if('imageSmoothingQuality' in outCtx){ outCtx.imageSmoothingQuality='high'; }
+        var targetW=sourceW*0.88;
+        var targetH=sourceH*0.78;
+        var ratio=Math.min(targetW/cropW,targetH/cropH);
+        var drawW=Math.max(1,cropW*ratio);
+        var drawH=Math.max(1,cropH*ratio);
+        var drawX=(sourceW-drawW)/2;
+        var drawY=(sourceH-drawH)/2;
+        outCtx.drawImage(srcCanvas,cropX,cropY,cropW,cropH,drawX,drawY,drawW,drawH);
+        resolve(outCanvas.toDataURL('image/png'));
+      }catch(_err){
+        resolve(src);
+      }
+    };
+    img.onerror=function(){
+      resolve(src);
+    };
+    img.src=src;
+  });
+}
+
+async function saveSignatureModal(){
   if(!(signatureModalDraft.signed && signatureModalDraft.value)){
     toast('✏️ Realiza la firma antes de guardar');
     return;
   }
-  applySignatureValueToContext(signatureModalContext,signatureModalDraft.value);
+  var saveBtn=document.getElementById('sig-modal-save');
+  if(saveBtn){
+    saveBtn.disabled=true;
+    saveBtn.textContent='Guardando...';
+  }
+  var normalized=await normalizeSavedSignatureDataUrl(signatureModalDraft.value);
+  applySignatureValueToContext(signatureModalContext,normalized||signatureModalDraft.value);
   closeSignatureModal();
   toast('✅ Firma guardada');
+  if(saveBtn){
+    saveBtn.disabled=false;
+    saveBtn.textContent='Guardar firma';
+  }
 }
 
 function clearSig(){
