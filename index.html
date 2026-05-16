@@ -244,18 +244,32 @@ tr:hover td{background:rgba(26,34,53,.5);}
 .ph-slot.filled img{width:100%;height:100%;object-fit:cover;}
 
 /* ── SIGNATURE ── */
-canvas.sig{
+.sig-inline-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px;}
+.sig-inline-preview{width:100%;height:130px;border-radius:10px;border:1px dashed var(--border);background:rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.sig-inline-preview img{width:100%;height:100%;object-fit:contain;display:none;background:#fff;}
+.sig-inline-preview.has-signature img{display:block;}
+.sig-inline-preview.has-signature .sig-inline-empty{display:none;}
+.sig-inline-empty{font-size:12px;color:var(--muted);}
+.sig-inline-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:8px;}
+
+.sig-modal{max-width:none;width:calc(100vw - 20px);height:calc(100vh - 20px);display:flex;flex-direction:column;}
+.sig-modal .m-body{padding:12px 16px;display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;}
+.sig-modal .m-foot{padding:12px 16px;flex-wrap:wrap;}
+.sig-modal-hint{font-size:12px;color:var(--muted);margin:0;}
+.sig-modal-canvas-wrap{flex:1;min-height:240px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px;}
+canvas.sig-modal-canvas{
   width:100%;
-  min-height:190px;
-  height:200px;
-  border-radius:12px;
-  border:1px solid var(--border);
-  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.04));
+  height:100%;
+  min-height:220px;
+  border-radius:10px;
+  border:1px solid #e5e7eb;
+  background:#ffffff;
   cursor:crosshair;
   touch-action:none;
   display:block;
 }
-canvas.sig.signed{border-color:var(--green);}
+.sig-modal-status{font-size:12px;color:var(--muted2);}
+canvas.sig-modal-canvas.signed{border-color:rgba(34,197,94,.65);}
 
 /* ── REPORT ── */
 .rpt{background:#fff;color:#111827;border-radius:14px;padding:28px;font-family:'DM Sans',sans-serif;}
@@ -365,12 +379,15 @@ canvas.sig.signed{border-color:var(--green);}
   .stats{grid-template-columns:repeat(2,1fr);}
   .frow{grid-template-columns:1fr;}
   .rgrid{grid-template-columns:1fr;}
-  canvas.sig{min-height:180px;height:190px;}
+  .sig-inline-preview{height:118px;}
+  .sig-modal{width:100vw;height:100vh;border-radius:0;}
+  .sig-modal .m-body{padding:10px 12px;}
+  .sig-modal .m-foot{padding:10px 12px;}
+  canvas.sig-modal-canvas{min-height:180px;}
   .page{padding:16px;}
   .topbar{padding:12px 16px;}
   .add-section-row{gap:6px;}
   .add-section-btn{font-size:11px;padding:6px 10px;}
-  .sig-dyn-tools{flex-wrap:wrap;}
   .auth-card{padding:16px;}
   .dash-filters .fs,.dash-filters .fi{width:100%;}
   .map-shell{grid-template-columns:1fr;min-height:auto;}
@@ -552,10 +569,18 @@ canvas.sig.signed{border-color:var(--green);}
           </div>
           <input id="ph-file" type="file" accept="image/*" style="display:none;">
           <div class="sec" style="margin-top:18px;">Firma del responsable</div>
-          <canvas class="sig" id="sig-c"></canvas>
-          <div style="display:flex;gap:8px;margin-top:7px;align-items:center;">
-            <button class="btn btn-ghost btn-sm" onclick="clearSig()">Limpiar firma</button>
-            <span style="font-size:12px;color:var(--muted);" id="sig-st">Sin firmar</span>
+          <div class="sig-inline-card">
+            <div class="sig-inline-preview" id="sig-fixed-preview-wrap">
+              <img id="sig-fixed-preview" alt="Firma del responsable">
+              <span class="sig-inline-empty">Sin firma capturada</span>
+            </div>
+            <div class="sig-inline-actions">
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn btn-primary btn-sm" onclick="openFixedSignatureModal()">Firmar</button>
+                <button class="btn btn-ghost btn-sm" onclick="clearSig()">Limpiar firma</button>
+              </div>
+              <span style="font-size:12px;color:var(--muted);" id="sig-st">Sin firmar</span>
+            </div>
           </div>
         </div>
       </div>
@@ -781,6 +806,29 @@ canvas.sig.signed{border-color:var(--green);}
   <div class="m-foot"><button class="btn btn-ghost" onclick="closeM('m-confirm')">Cancelar</button><button class="btn btn-danger" id="confirm-ok">Eliminar</button></div>
 </div></div>
 
+<!-- FULLSCREEN SIGNATURE -->
+<div class="overlay" id="m-sign"><div class="modal sig-modal">
+  <div class="m-head">
+    <div>
+      <div class="m-title" id="sig-modal-title">Capturar firma</div>
+      <div style="font-size:12px;color:var(--muted);" id="sig-modal-sub">Traza tu firma y pulsa Guardar firma</div>
+    </div>
+    <button class="m-close" onclick="closeSignatureModal()">✕</button>
+  </div>
+  <div class="m-body">
+    <p class="sig-modal-hint">Firma en toda la pantalla para mayor precisión.</p>
+    <div class="sig-modal-canvas-wrap">
+      <canvas id="sig-modal-canvas" class="sig-modal-canvas"></canvas>
+    </div>
+    <div class="sig-modal-status" id="sig-modal-status">Sin firmar</div>
+  </div>
+  <div class="m-foot">
+    <button class="btn btn-ghost" onclick="clearSignatureModalCanvas()">Limpiar</button>
+    <button class="btn btn-ghost" onclick="closeSignatureModal()">Cancelar</button>
+    <button class="btn btn-primary" id="sig-modal-save" onclick="saveSignatureModal()">Guardar firma</button>
+  </div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -864,13 +912,15 @@ var DB = {
   nextNum:4
 };
 
-var curOrderId=null, chkState={}, sigDraw=false, sigSigned=false;
+var curOrderId=null, chkState={}, sigSigned=false;
 var currentWorkMode='order';
 var currentFreeChecklistId='';
 var tmpSections=[];
 var dynamicSignatureState={};
-var dynamicSignaturePads={};
-var fixedSignaturePad=null;
+var fixedSignatureData='';
+var signatureModalPad=null;
+var signatureModalContext={type:'fixed',key:'fixed',label:'Firma del responsable'};
+var signatureModalDraft={signed:false,value:''};
 window.dashboardReportsCache=Array.isArray(window.dashboardReportsCache)?window.dashboardReportsCache:[];
 var techLiveGpsState={
   active:false,
@@ -2070,15 +2120,9 @@ function setWorkModeButtonLabel(){
 }
 
 function refreshVisibleSignaturePads(){
-  if(fixedSignaturePad && typeof fixedSignaturePad.resize==='function'){
-    fixedSignaturePad.resize();
+  if(signatureModalPad && typeof signatureModalPad.resize==='function'){
+    signatureModalPad.resize();
   }
-  Object.keys(dynamicSignaturePads||{}).forEach(function(key){
-    var pad=dynamicSignaturePads[key];
-    if(pad && typeof pad.resize==='function'){
-      pad.resize();
-    }
-  });
 }
 
 function normalizeSectionDomKey(raw){
@@ -2095,13 +2139,34 @@ function createSignaturePad(canvas,options){
   var activePointerId=null;
   var lastPoint=null;
   var lastMidPoint=null;
+  var lastTimestamp=0;
+  var velocity=0;
+  var baseLineWidth=Number(opts.lineWidth)||2.8;
+  var minLineWidth=Math.max(0.8,Number(opts.minLineWidth)||1.1);
+  var maxLineWidth=Math.max(minLineWidth+0.2,Number(opts.maxLineWidth)||4.6);
+  var velocityFactor=Math.max(0.2,Number(opts.velocityFactor)||2.35);
+  var velocityFilterWeight=Math.min(0.97,Math.max(0.45,Number(opts.velocityFilterWeight)||0.75));
+  var currentLineWidth=Math.min(maxLineWidth,Math.max(minLineWidth,baseLineWidth));
 
-  function applyBrushStyle(){
+  function clamp(value,min,max){
+    return Math.min(max,Math.max(min,value));
+  }
+
+  function applyBrushStyle(lineWidth){
+    var nextWidth=typeof lineWidth==='number' ? lineWidth : currentLineWidth;
+    currentLineWidth=clamp(nextWidth,minLineWidth,maxLineWidth);
     ctx.strokeStyle=opts.strokeStyle||'#111827';
-    ctx.lineWidth=Number(opts.lineWidth)||2.6;
+    ctx.lineWidth=currentLineWidth;
     ctx.lineCap='round';
     ctx.lineJoin='round';
     ctx.imageSmoothingEnabled=true;
+  }
+
+  function clearCanvasOnly(){
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.restore();
   }
 
   function resizeCanvas(preserveDrawing){
@@ -2124,6 +2189,7 @@ function createSignaturePad(canvas,options){
     if(snapshot){
       var restoreImg=new Image();
       restoreImg.onload=function(){
+        clearCanvasOnly();
         ctx.drawImage(restoreImg,0,0,cssWidth,cssHeight);
       };
       restoreImg.src=snapshot;
@@ -2147,13 +2213,27 @@ function createSignaturePad(canvas,options){
     if(ev && typeof ev.preventDefault==='function') ev.preventDefault();
     resizeCanvas(true);
     drawing=true;
+    velocity=0;
+    currentLineWidth=maxLineWidth;
+    applyBrushStyle(currentLineWidth);
     lastPoint=point;
     lastMidPoint=point;
+    lastTimestamp=Number(ev && ev.timeStamp)||Date.now();
     if(typeof opts.onStart==='function') opts.onStart();
   }
 
-  function drawStroke(point){
+  function drawStroke(point,timestamp){
     if(!drawing || !point) return;
+    var now=Number(timestamp)||Date.now();
+    var dx=point.x-lastPoint.x;
+    var dy=point.y-lastPoint.y;
+    var distance=Math.sqrt((dx*dx)+(dy*dy));
+    var deltaT=Math.max(now-lastTimestamp,1);
+    var instantVelocity=distance/deltaT;
+    velocity=(velocityFilterWeight*velocity)+((1-velocityFilterWeight)*instantVelocity);
+    var targetLineWidth=maxLineWidth-(Math.min(1,velocity*velocityFactor)*(maxLineWidth-minLineWidth));
+    currentLineWidth=(currentLineWidth*0.7)+(targetLineWidth*0.3);
+    applyBrushStyle(currentLineWidth);
     var midPoint={x:(lastPoint.x+point.x)/2,y:(lastPoint.y+point.y)/2};
     ctx.beginPath();
     ctx.moveTo(lastMidPoint.x,lastMidPoint.y);
@@ -2165,6 +2245,7 @@ function createSignaturePad(canvas,options){
       hasStroke=true;
       if(typeof opts.onStroke==='function') opts.onStroke();
     }
+    lastTimestamp=now;
   }
 
   function endStroke(ev){
@@ -2195,7 +2276,7 @@ function createSignaturePad(canvas,options){
       if(!drawing) return;
       if(activePointerId!==null && ev.pointerId!==activePointerId) return;
       if(typeof ev.preventDefault==='function') ev.preventDefault();
-      drawStroke(pointFromEvent(ev));
+      drawStroke(pointFromEvent(ev),ev.timeStamp);
     });
     canvas.addEventListener('pointerup',endStroke);
     canvas.addEventListener('pointercancel',endStroke);
@@ -2208,7 +2289,7 @@ function createSignaturePad(canvas,options){
     canvas.addEventListener('mousemove',function(ev){
       if(!drawing) return;
       if(typeof ev.preventDefault==='function') ev.preventDefault();
-      drawStroke(pointFromEvent(ev));
+      drawStroke(pointFromEvent(ev),ev.timeStamp);
     });
     canvas.addEventListener('mouseup',endStroke);
     canvas.addEventListener('mouseleave',endStroke);
@@ -2218,7 +2299,7 @@ function createSignaturePad(canvas,options){
     canvas.addEventListener('touchmove',function(ev){
       if(!drawing) return;
       if(typeof ev.preventDefault==='function') ev.preventDefault();
-      drawStroke(pointFromTouch(ev));
+      drawStroke(pointFromTouch(ev),ev.timeStamp);
     },{passive:false});
     canvas.addEventListener('touchend',endStroke);
     canvas.addEventListener('touchcancel',endStroke);
@@ -2231,16 +2312,15 @@ function createSignaturePad(canvas,options){
 
   return {
     clear:function(){
-      ctx.save();
-      ctx.setTransform(1,0,0,1,0,0);
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.restore();
+      clearCanvasOnly();
       applyBrushStyle();
       drawing=false;
       hasStroke=false;
       lastPoint=null;
       lastMidPoint=null;
       activePointerId=null;
+      lastTimestamp=0;
+      velocity=0;
       if(typeof opts.onCommit==='function'){
         opts.onCommit('',false);
       }
@@ -2253,48 +2333,217 @@ function createSignaturePad(canvas,options){
     },
     getDataUrl:function(){
       return hasStroke?canvas.toDataURL('image/png'):'';
+    },
+    setDataUrl:function(dataUrl){
+      var value=String(dataUrl||'').trim();
+      resizeCanvas(false);
+      clearCanvasOnly();
+      drawing=false;
+      hasStroke=false;
+      activePointerId=null;
+      lastPoint=null;
+      lastMidPoint=null;
+      lastTimestamp=0;
+      velocity=0;
+      if(!value){
+        applyBrushStyle();
+        if(typeof opts.onCommit==='function'){
+          opts.onCommit('',false);
+        }
+        return;
+      }
+      var img=new Image();
+      img.onload=function(){
+        var drawW=canvas.__sigW||canvas.clientWidth||1;
+        var drawH=canvas.__sigH||canvas.clientHeight||1;
+        clearCanvasOnly();
+        ctx.drawImage(img,0,0,drawW,drawH);
+        hasStroke=true;
+        applyBrushStyle(maxLineWidth);
+        if(typeof opts.onStroke==='function') opts.onStroke();
+        if(typeof opts.onCommit==='function'){
+          opts.onCommit(canvas.toDataURL('image/png'),true);
+        }
+      };
+      img.onerror=function(){
+        applyBrushStyle();
+        if(typeof opts.onCommit==='function'){
+          opts.onCommit('',false);
+        }
+      };
+      img.src=value;
     }
   };
 }
 
-function initDynamicSignatureCanvas(sectionId){
-  var key=normalizeSectionDomKey(sectionId);
-  var canvas=document.getElementById('sigdyn-'+key);
-  if(!canvas) return;
+function updateFixedSignatureUi(){
+  var wrap=document.getElementById('sig-fixed-preview-wrap');
+  var img=document.getElementById('sig-fixed-preview');
+  var statusEl=document.getElementById('sig-st');
+  var signed=!!String(fixedSignatureData||'').trim();
+  if(img){
+    img.src=signed?fixedSignatureData:'';
+  }
+  if(wrap){
+    wrap.classList.toggle('has-signature',signed);
+  }
+  sigSigned=signed;
+  if(statusEl){
+    statusEl.textContent=signed?'✓ Firmado':'Sin firmar';
+  }
+}
+
+function updateDynamicSignatureUi(sigKey){
+  var key=normalizeSectionDomKey(sigKey);
+  var state=dynamicSignatureState[key]||{signed:false,value:''};
+  var signed=!!String(state.value||'').trim();
+  var wrap=document.getElementById('sigdyn-prev-'+key);
+  var img=document.getElementById('sigdyn-img-'+key);
   var statusEl=document.getElementById('sigdyn-st-'+key);
-  dynamicSignaturePads[key]=createSignaturePad(canvas,{
-    lineWidth:2.8,
-    strokeStyle:'#111827',
-    onStroke:function(){
-      canvas.classList.add('signed');
-      if(statusEl) statusEl.textContent='✓ Firmado';
-    },
-    onCommit:function(value,signed){
-      dynamicSignatureState[key]={signed:!!signed,value:value||''};
-      canvas.classList.toggle('signed',!!signed);
-      if(statusEl) statusEl.textContent=signed?'✓ Firmado':'Sin firmar';
-    }
-  });
+  if(img){
+    img.src=signed?state.value:'';
+  }
+  if(wrap){
+    wrap.classList.toggle('has-signature',signed);
+  }
+  if(statusEl){
+    statusEl.textContent=signed?'✓ Firmado':'Sin firmar';
+  }
+}
+
+function setDynamicSignatureValue(sigKey,value){
+  var key=normalizeSectionDomKey(sigKey);
+  var data=String(value||'').trim();
+  dynamicSignatureState[key]={signed:!!data,value:data};
+  updateDynamicSignatureUi(key);
+}
+
+function getSignatureValueFromContext(ctx){
+  if(!ctx || !ctx.type) return '';
+  if(ctx.type==='fixed'){
+    return String(fixedSignatureData||'').trim();
+  }
+  var state=dynamicSignatureState[normalizeSectionDomKey(ctx.key)]||{value:''};
+  return String(state.value||'').trim();
+}
+
+function applySignatureValueToContext(ctx,dataUrl){
+  var value=String(dataUrl||'').trim();
+  if(!ctx || !ctx.type) return;
+  if(ctx.type==='fixed'){
+    fixedSignatureData=value;
+    updateFixedSignatureUi();
+    return;
+  }
+  setDynamicSignatureValue(ctx.key,value);
+}
+
+function updateSignatureModalUiState(){
+  var statusEl=document.getElementById('sig-modal-status');
+  var saveBtn=document.getElementById('sig-modal-save');
+  var canvas=document.getElementById('sig-modal-canvas');
+  var signed=signatureModalDraft.signed===true && !!String(signatureModalDraft.value||'').trim();
+  if(statusEl){
+    statusEl.textContent=signed?'✓ Firma lista para guardar':'Sin firmar';
+  }
+  if(saveBtn){
+    saveBtn.disabled=!signed;
+    saveBtn.style.opacity=signed?'':'0.65';
+  }
+  if(canvas){
+    canvas.classList.toggle('signed',signed);
+  }
+}
+
+function initSignatureModalPad(initialData){
+  var canvas=document.getElementById('sig-modal-canvas');
+  if(!canvas) return;
+  if(!signatureModalPad){
+    signatureModalPad=createSignaturePad(canvas,{
+      lineWidth:3,
+      minLineWidth:1.1,
+      maxLineWidth:4.8,
+      velocityFactor:2.45,
+      velocityFilterWeight:0.78,
+      strokeStyle:'#111827',
+      onCommit:function(value,signed){
+        signatureModalDraft={signed:!!signed,value:value||''};
+        updateSignatureModalUiState();
+      }
+    });
+  }
+  signatureModalPad.resize();
+  signatureModalPad.setDataUrl(initialData||'');
+}
+
+function openSignatureModal(context){
+  var ctx=context||{};
+  signatureModalContext={
+    type:ctx.type==='dynamic'?'dynamic':'fixed',
+    key:ctx.key||'fixed',
+    label:String(ctx.label||'Firma').trim()||'Firma'
+  };
+  var titleEl=document.getElementById('sig-modal-title');
+  var subEl=document.getElementById('sig-modal-sub');
+  if(titleEl){
+    titleEl.textContent='Firmar: '+signatureModalContext.label;
+  }
+  if(subEl){
+    subEl.textContent='Traza tu firma y pulsa Guardar firma';
+  }
+  signatureModalDraft={signed:false,value:''};
+  updateSignatureModalUiState();
+  openM('m-sign');
+  setTimeout(function(){
+    initSignatureModalPad(getSignatureValueFromContext(signatureModalContext));
+  },20);
+}
+
+function openFixedSignatureModal(){
+  openSignatureModal({type:'fixed',key:'fixed',label:'Firma del responsable'});
+}
+
+function openDynamicSignatureModal(sectionId){
+  var key=normalizeSectionDomKey(sectionId);
+  var labelEl=document.getElementById('sigdyn-lbl-'+key);
+  var label=labelEl?String(labelEl.textContent||'').trim():'Firma dinámica';
+  openSignatureModal({type:'dynamic',key:key,label:label||'Firma dinámica'});
+}
+
+function closeSignatureModal(){
+  closeM('m-sign');
+}
+
+function clearSignatureModalCanvas(){
+  if(!signatureModalPad) return;
+  signatureModalPad.clear();
+}
+
+function saveSignatureModal(){
+  if(!(signatureModalDraft.signed && signatureModalDraft.value)){
+    toast('✏️ Realiza la firma antes de guardar');
+    return;
+  }
+  applySignatureValueToContext(signatureModalContext,signatureModalDraft.value);
+  closeSignatureModal();
+  toast('✅ Firma guardada');
+}
+
+function clearSig(){
+  fixedSignatureData='';
+  sigSigned=false;
+  updateFixedSignatureUi();
 }
 
 function clearSectionSignature(sectionId){
   var key=normalizeSectionDomKey(sectionId);
-  var pad=dynamicSignaturePads[key];
-  if(pad){ pad.clear(); return; }
-  var canvas=document.getElementById('sigdyn-'+key);
-  var statusEl=document.getElementById('sigdyn-st-'+key);
-  if(!canvas) return;
-  canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
-  dynamicSignatureState[key]={signed:false,value:''};
-  canvas.classList.remove('signed');
-  if(statusEl) statusEl.textContent='Sin firmar';
+  setDynamicSignatureValue(key,'');
 }
 
 function buildWorkDynamicHtml(ck){
   var dynHtml='';
   chkState={};
   dynamicSignatureState={};
-  dynamicSignaturePads={};
   var sections=(ck&&Array.isArray(ck.sections))?ck.sections:[];
   sections.forEach(function(sec,si){
     if(sec.type==='checklist'){
@@ -2331,8 +2580,11 @@ function buildWorkDynamicHtml(ck){
     }
     if(sec.type==='signature'){
       var sigKey=normalizeSectionDomKey(sec.id||('sig-'+si));
+      var sigSectionRef=String(sec.id||('sig-'+si)).replace(/'/g,"\\'");
       var req=sec.required===true?' <span style="color:var(--accent)">*</span>':'';
-      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+(sec.title||'Firma')+'</div><div class="dyn-field"><label>'+(sec.label||'Firma')+req+'</label><canvas class="sig" id="sigdyn-'+sigKey+'"></canvas><div class="sig-dyn-tools"><button class="btn btn-ghost btn-sm" onclick="clearSectionSignature(\''+String(sec.id||'')+'\')">Limpiar firma</button><span class="sig-dyn-status" id="sigdyn-st-'+sigKey+'">Sin firmar</span></div></div></div>';
+      var sigLabel=sec.label||'Firma';
+      var safeSigLabel=mapEscapeHtml(sigLabel);
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+(sec.title||'Firma')+'</div><div class="dyn-field"><label id="sigdyn-lbl-'+sigKey+'">'+safeSigLabel+req+'</label><div class="sig-inline-card"><div class="sig-inline-preview" id="sigdyn-prev-'+sigKey+'"><img id="sigdyn-img-'+sigKey+'" alt="'+safeSigLabel+'"><span class="sig-inline-empty">Sin firma capturada</span></div><div class="sig-inline-actions"><div style="display:flex;gap:8px;align-items:center;"><button class="btn btn-primary btn-sm" onclick="openDynamicSignatureModal(\''+sigSectionRef+'\')">Firmar</button><button class="btn btn-ghost btn-sm" onclick="clearSectionSignature(\''+sigSectionRef+'\')">Limpiar firma</button></div><span class="sig-dyn-status" id="sigdyn-st-'+sigKey+'">Sin firmar</span></div></div></div></div>';
       return;
     }
   });
@@ -2347,7 +2599,11 @@ function initDynamicWorkSections(ck){
   var sections=(ck&&Array.isArray(ck.sections))?ck.sections:[];
   sections.forEach(function(sec,si){
     if(sec.type==='signature'){
-      initDynamicSignatureCanvas(sec.id||('sig-'+si));
+      var key=normalizeSectionDomKey(sec.id||('sig-'+si));
+      if(!dynamicSignatureState[key]){
+        dynamicSignatureState[key]={signed:false,value:''};
+      }
+      updateDynamicSignatureUi(key);
     }
   });
 }
@@ -3858,44 +4114,9 @@ async function uploadPendingPhotos(orderId){
 }
 
 function initSig(){
-  var c=document.getElementById('sig-c');
-  if(!c) return;
-  fixedSignaturePad=createSignaturePad(c,{
-    lineWidth:2.9,
-    strokeStyle:'#111827',
-    onStroke:function(){
-      markSig();
-    },
-    onCommit:function(_value,signed){
-      sigSigned=!!signed;
-      c.classList.toggle('signed',!!signed);
-      var statusEl=document.getElementById('sig-st');
-      if(statusEl) statusEl.textContent=signed?'✓ Firmado':'Sin firmar';
-    }
-  });
-  if(fixedSignaturePad){
-    fixedSignaturePad.resize();
-  }
-}
-function markSig(){
-  sigSigned=true;
-  var canvas=document.getElementById('sig-c');
-  var statusEl=document.getElementById('sig-st');
-  if(canvas) canvas.classList.add('signed');
-  if(statusEl) statusEl.textContent='✓ Firmado';
-}
-function clearSig(){
-  if(fixedSignaturePad){
-    fixedSignaturePad.clear();
-    return;
-  }
-  var c=document.getElementById('sig-c');
-  if(!c) return;
-  c.getContext('2d').clearRect(0,0,c.width,c.height);
+  fixedSignatureData='';
   sigSigned=false;
-  c.classList.remove('signed');
-  var statusEl=document.getElementById('sig-st');
-  if(statusEl) statusEl.textContent='Sin firmar';
+  updateFixedSignatureUi();
 }
 
 function collectChecklistReportData(ck,total,done){
@@ -4100,7 +4321,7 @@ async function closeOrder(){
   closingOrderInProgress=true;
   if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
   var reportMeta=extractBrisamReportMeta(captured.respuestas,captured.observaciones||(!isFree&&o?o.desc:''));
-  var signatureData=document.getElementById('sig-c').toDataURL('image/png');
+  var signatureData=String(fixedSignatureData||'').trim();
   var reportFolio=isFree?generatedFolio:o.id;
   var checklistTemplateType=resolvePdfTemplateType({
     templateType:ck&&ck.templateType,
@@ -4318,7 +4539,10 @@ function buildReport(o,locationData){
   var photos='';
   document.querySelectorAll('.ph-slot.filled').forEach(function(s){ photos+='<div class="rphoto">'+s.innerHTML+'</div>'; });
   if(!photos) photos='<div style="color:#9ca3af;font-size:11px;padding:6px;">Sin fotos adjuntas</div>';
-  var sigData=document.getElementById('sig-c').toDataURL();
+  var sigData=String(fixedSignatureData||'').trim();
+  var sigPreviewHtml=sigData
+    ? '<img src="'+sigData+'" style="height:55px;max-width:100%;">'
+    : '<div style="height:55px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px;">Sin firma</div>';
 
   document.getElementById('rpt-content').innerHTML=
     '<div style="display:flex;gap:10px;margin-bottom:16px;">'
@@ -4344,7 +4568,7 @@ function buildReport(o,locationData){
     +'<div class="rphotos">'+photos+'</div>'
     +'<div class="rdiv"></div>'
     +'<div class="rst">Firma de conformidad</div>'
-    +'<div class="rsig"><img src="'+sigData+'" style="height:55px;max-width:100%;"><div class="rsig-lbl">Responsable en sucursal — '+(br?br.name:'—')+'</div></div>'
+    +'<div class="rsig">'+sigPreviewHtml+'<div class="rsig-lbl">Responsable en sucursal — '+(br?br.name:'—')+'</div></div>'
     +'<div class="rfoot"><div class="rfoot-brand">MantenPro</div><div class="rfoot-meta">Generado: '+now+' · '+o.id+'</div></div>'
     +'</div>';
 }
