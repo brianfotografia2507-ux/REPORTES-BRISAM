@@ -244,7 +244,17 @@ tr:hover td{background:rgba(26,34,53,.5);}
 .ph-slot.filled img{width:100%;height:100%;object-fit:cover;}
 
 /* ── SIGNATURE ── */
-canvas.sig{width:100%;height:110px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);cursor:crosshair;touch-action:none;display:block;}
+canvas.sig{
+  width:100%;
+  min-height:190px;
+  height:200px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.04));
+  cursor:crosshair;
+  touch-action:none;
+  display:block;
+}
 canvas.sig.signed{border-color:var(--green);}
 
 /* ── REPORT ── */
@@ -355,10 +365,12 @@ canvas.sig.signed{border-color:var(--green);}
   .stats{grid-template-columns:repeat(2,1fr);}
   .frow{grid-template-columns:1fr;}
   .rgrid{grid-template-columns:1fr;}
+  canvas.sig{min-height:180px;height:190px;}
   .page{padding:16px;}
   .topbar{padding:12px 16px;}
   .add-section-row{gap:6px;}
   .add-section-btn{font-size:11px;padding:6px 10px;}
+  .sig-dyn-tools{flex-wrap:wrap;}
   .auth-card{padding:16px;}
   .dash-filters .fs,.dash-filters .fi{width:100%;}
   .map-shell{grid-template-columns:1fr;min-height:auto;}
@@ -540,7 +552,7 @@ canvas.sig.signed{border-color:var(--green);}
           </div>
           <input id="ph-file" type="file" accept="image/*" style="display:none;">
           <div class="sec" style="margin-top:18px;">Firma del responsable</div>
-          <canvas class="sig" id="sig-c" width="600" height="110"></canvas>
+          <canvas class="sig" id="sig-c"></canvas>
           <div style="display:flex;gap:8px;margin-top:7px;align-items:center;">
             <button class="btn btn-ghost btn-sm" onclick="clearSig()">Limpiar firma</button>
             <span style="font-size:12px;color:var(--muted);" id="sig-st">Sin firmar</span>
@@ -857,6 +869,8 @@ var currentWorkMode='order';
 var currentFreeChecklistId='';
 var tmpSections=[];
 var dynamicSignatureState={};
+var dynamicSignaturePads={};
+var fixedSignaturePad=null;
 window.dashboardReportsCache=Array.isArray(window.dashboardReportsCache)?window.dashboardReportsCache:[];
 var techLiveGpsState={
   active:false,
@@ -2055,8 +2069,192 @@ function setWorkModeButtonLabel(){
   btn.textContent=currentWorkMode==='free'?'✓ Guardar Checklist y Generar Reporte':'✓ Cerrar Orden y Generar Reporte';
 }
 
+function refreshVisibleSignaturePads(){
+  if(fixedSignaturePad && typeof fixedSignaturePad.resize==='function'){
+    fixedSignaturePad.resize();
+  }
+  Object.keys(dynamicSignaturePads||{}).forEach(function(key){
+    var pad=dynamicSignaturePads[key];
+    if(pad && typeof pad.resize==='function'){
+      pad.resize();
+    }
+  });
+}
+
 function normalizeSectionDomKey(raw){
   return String(raw||'').replace(/[^a-zA-Z0-9_-]/g,'_');
+}
+
+function createSignaturePad(canvas,options){
+  if(!canvas) return null;
+  var opts=options||{};
+  var ctx=canvas.getContext('2d');
+  if(!ctx) return null;
+  var drawing=false;
+  var hasStroke=false;
+  var activePointerId=null;
+  var lastPoint=null;
+  var lastMidPoint=null;
+
+  function applyBrushStyle(){
+    ctx.strokeStyle=opts.strokeStyle||'#111827';
+    ctx.lineWidth=Number(opts.lineWidth)||2.6;
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+    ctx.imageSmoothingEnabled=true;
+  }
+
+  function resizeCanvas(preserveDrawing){
+    var rect=canvas.getBoundingClientRect();
+    var cssWidth=Math.max(1,Math.round(rect.width||canvas.clientWidth||600));
+    var cssHeight=Math.max(1,Math.round(rect.height||canvas.clientHeight||200));
+    var dpr=Math.max(window.devicePixelRatio||1,1);
+    if(canvas.__sigW===cssWidth && canvas.__sigH===cssHeight && canvas.__sigDpr===dpr){
+      applyBrushStyle();
+      return;
+    }
+    var snapshot=(preserveDrawing && hasStroke)?canvas.toDataURL('image/png'):'';
+    canvas.width=Math.round(cssWidth*dpr);
+    canvas.height=Math.round(cssHeight*dpr);
+    canvas.__sigW=cssWidth;
+    canvas.__sigH=cssHeight;
+    canvas.__sigDpr=dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    applyBrushStyle();
+    if(snapshot){
+      var restoreImg=new Image();
+      restoreImg.onload=function(){
+        ctx.drawImage(restoreImg,0,0,cssWidth,cssHeight);
+      };
+      restoreImg.src=snapshot;
+    }
+  }
+
+  function pointFromEvent(ev){
+    var rect=canvas.getBoundingClientRect();
+    return {x:ev.clientX-rect.left,y:ev.clientY-rect.top};
+  }
+
+  function pointFromTouch(ev){
+    var touch=(ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]);
+    if(!touch) return null;
+    var rect=canvas.getBoundingClientRect();
+    return {x:touch.clientX-rect.left,y:touch.clientY-rect.top};
+  }
+
+  function startStroke(point,ev){
+    if(!point) return;
+    if(ev && typeof ev.preventDefault==='function') ev.preventDefault();
+    resizeCanvas(true);
+    drawing=true;
+    lastPoint=point;
+    lastMidPoint=point;
+    if(typeof opts.onStart==='function') opts.onStart();
+  }
+
+  function drawStroke(point){
+    if(!drawing || !point) return;
+    var midPoint={x:(lastPoint.x+point.x)/2,y:(lastPoint.y+point.y)/2};
+    ctx.beginPath();
+    ctx.moveTo(lastMidPoint.x,lastMidPoint.y);
+    ctx.quadraticCurveTo(lastPoint.x,lastPoint.y,midPoint.x,midPoint.y);
+    ctx.stroke();
+    lastPoint=point;
+    lastMidPoint=midPoint;
+    if(!hasStroke){
+      hasStroke=true;
+      if(typeof opts.onStroke==='function') opts.onStroke();
+    }
+  }
+
+  function endStroke(ev){
+    if(!drawing) return;
+    if(ev && typeof ev.pointerId==='number' && activePointerId!==null && ev.pointerId!==activePointerId) return;
+    drawing=false;
+    lastPoint=null;
+    lastMidPoint=null;
+    if(activePointerId!==null && canvas.releasePointerCapture){
+      try{ canvas.releasePointerCapture(activePointerId); }catch(_err){}
+    }
+    activePointerId=null;
+    if(typeof opts.onCommit==='function'){
+      opts.onCommit(hasStroke?canvas.toDataURL('image/png'):'',hasStroke);
+    }
+  }
+
+  if(window.PointerEvent){
+    canvas.addEventListener('pointerdown',function(ev){
+      if(ev.button!==undefined && ev.button!==0) return;
+      activePointerId=ev.pointerId;
+      if(canvas.setPointerCapture){
+        try{ canvas.setPointerCapture(ev.pointerId); }catch(_err){}
+      }
+      startStroke(pointFromEvent(ev),ev);
+    });
+    canvas.addEventListener('pointermove',function(ev){
+      if(!drawing) return;
+      if(activePointerId!==null && ev.pointerId!==activePointerId) return;
+      if(typeof ev.preventDefault==='function') ev.preventDefault();
+      drawStroke(pointFromEvent(ev));
+    });
+    canvas.addEventListener('pointerup',endStroke);
+    canvas.addEventListener('pointercancel',endStroke);
+    canvas.addEventListener('pointerleave',endStroke);
+  }else{
+    canvas.addEventListener('mousedown',function(ev){
+      if(ev.button!==0) return;
+      startStroke(pointFromEvent(ev),ev);
+    });
+    canvas.addEventListener('mousemove',function(ev){
+      if(!drawing) return;
+      if(typeof ev.preventDefault==='function') ev.preventDefault();
+      drawStroke(pointFromEvent(ev));
+    });
+    canvas.addEventListener('mouseup',endStroke);
+    canvas.addEventListener('mouseleave',endStroke);
+    canvas.addEventListener('touchstart',function(ev){
+      startStroke(pointFromTouch(ev),ev);
+    },{passive:false});
+    canvas.addEventListener('touchmove',function(ev){
+      if(!drawing) return;
+      if(typeof ev.preventDefault==='function') ev.preventDefault();
+      drawStroke(pointFromTouch(ev));
+    },{passive:false});
+    canvas.addEventListener('touchend',endStroke);
+    canvas.addEventListener('touchcancel',endStroke);
+  }
+
+  resizeCanvas(false);
+  if(typeof opts.onCommit==='function'){
+    opts.onCommit('',false);
+  }
+
+  return {
+    clear:function(){
+      ctx.save();
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.restore();
+      applyBrushStyle();
+      drawing=false;
+      hasStroke=false;
+      lastPoint=null;
+      lastMidPoint=null;
+      activePointerId=null;
+      if(typeof opts.onCommit==='function'){
+        opts.onCommit('',false);
+      }
+    },
+    resize:function(){
+      resizeCanvas(hasStroke);
+    },
+    isSigned:function(){
+      return hasStroke;
+    },
+    getDataUrl:function(){
+      return hasStroke?canvas.toDataURL('image/png'):'';
+    }
+  };
 }
 
 function initDynamicSignatureCanvas(sectionId){
@@ -2064,55 +2262,31 @@ function initDynamicSignatureCanvas(sectionId){
   var canvas=document.getElementById('sigdyn-'+key);
   if(!canvas) return;
   var statusEl=document.getElementById('sigdyn-st-'+key);
-  var ctx=canvas.getContext('2d');
-  ctx.strokeStyle='#f97316';
-  ctx.lineWidth=2;
-  ctx.lineCap='round';
-  ctx.lineJoin='round';
-  var drawing=false;
-  function setSigned(){
-    dynamicSignatureState[key]={signed:true,value:canvas.toDataURL('image/png')};
-    if(statusEl) statusEl.textContent='✓ Firmado';
-  }
-  function getPos(e){
-    var r=canvas.getBoundingClientRect();
-    var s=e.touches?e.touches[0]:e;
-    return{x:(s.clientX-r.left)*(canvas.width/r.width),y:(s.clientY-r.top)*(canvas.height/r.height)};
-  }
-  function start(e){
-    e.preventDefault();
-    drawing=true;
-    var p=getPos(e);
-    ctx.beginPath();
-    ctx.moveTo(p.x,p.y);
-  }
-  function draw(e){
-    if(!drawing) return;
-    e.preventDefault();
-    var p=getPos(e);
-    ctx.lineTo(p.x,p.y);
-    ctx.stroke();
-    setSigned();
-  }
-  function stop(){ drawing=false; }
-  canvas.addEventListener('mousedown',start);
-  canvas.addEventListener('mousemove',draw);
-  canvas.addEventListener('mouseup',stop);
-  canvas.addEventListener('mouseleave',stop);
-  canvas.addEventListener('touchstart',start,{passive:false});
-  canvas.addEventListener('touchmove',draw,{passive:false});
-  canvas.addEventListener('touchend',stop);
-  dynamicSignatureState[key]={signed:false,value:''};
-  if(statusEl) statusEl.textContent='Sin firmar';
+  dynamicSignaturePads[key]=createSignaturePad(canvas,{
+    lineWidth:2.8,
+    strokeStyle:'#111827',
+    onStroke:function(){
+      canvas.classList.add('signed');
+      if(statusEl) statusEl.textContent='✓ Firmado';
+    },
+    onCommit:function(value,signed){
+      dynamicSignatureState[key]={signed:!!signed,value:value||''};
+      canvas.classList.toggle('signed',!!signed);
+      if(statusEl) statusEl.textContent=signed?'✓ Firmado':'Sin firmar';
+    }
+  });
 }
 
 function clearSectionSignature(sectionId){
   var key=normalizeSectionDomKey(sectionId);
+  var pad=dynamicSignaturePads[key];
+  if(pad){ pad.clear(); return; }
   var canvas=document.getElementById('sigdyn-'+key);
   var statusEl=document.getElementById('sigdyn-st-'+key);
   if(!canvas) return;
   canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
   dynamicSignatureState[key]={signed:false,value:''};
+  canvas.classList.remove('signed');
   if(statusEl) statusEl.textContent='Sin firmar';
 }
 
@@ -2120,6 +2294,7 @@ function buildWorkDynamicHtml(ck){
   var dynHtml='';
   chkState={};
   dynamicSignatureState={};
+  dynamicSignaturePads={};
   var sections=(ck&&Array.isArray(ck.sections))?ck.sections:[];
   sections.forEach(function(sec,si){
     if(sec.type==='checklist'){
@@ -2157,7 +2332,7 @@ function buildWorkDynamicHtml(ck){
     if(sec.type==='signature'){
       var sigKey=normalizeSectionDomKey(sec.id||('sig-'+si));
       var req=sec.required===true?' <span style="color:var(--accent)">*</span>':'';
-      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+(sec.title||'Firma')+'</div><div class="dyn-field"><label>'+(sec.label||'Firma')+req+'</label><canvas class="sig" id="sigdyn-'+sigKey+'" width="520" height="130"></canvas><div class="sig-dyn-tools"><button class="btn btn-ghost btn-sm" onclick="clearSectionSignature(\''+String(sec.id||'')+'\')">Limpiar firma</button><span class="sig-dyn-status" id="sigdyn-st-'+sigKey+'">Sin firmar</span></div></div></div>';
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+(sec.title||'Firma')+'</div><div class="dyn-field"><label>'+(sec.label||'Firma')+req+'</label><canvas class="sig" id="sigdyn-'+sigKey+'"></canvas><div class="sig-dyn-tools"><button class="btn btn-ghost btn-sm" onclick="clearSectionSignature(\''+String(sec.id||'')+'\')">Limpiar firma</button><span class="sig-dyn-status" id="sigdyn-st-'+sigKey+'">Sin firmar</span></div></div></div>';
       return;
     }
   });
@@ -2214,6 +2389,7 @@ function openTechChecklistWork(checklistId){
   updateProg();
   setWorkModeButtonLabel();
   document.getElementById('wd-wrap').style.display='block';
+  setTimeout(refreshVisibleSignaturePads,20);
   setTimeout(function(){ document.getElementById('wd-wrap').scrollIntoView({behavior:'smooth'}); },80);
   toast('🧾 Checklist abierto');
 }
@@ -2276,6 +2452,7 @@ function openWork(id){
   updateProg();
   o.status='progress';
   document.getElementById('wd-wrap').style.display='block';
+  setTimeout(refreshVisibleSignaturePads,20);
   setTimeout(function(){ document.getElementById('wd-wrap').scrollIntoView({behavior:'smooth'}); },80);
   toast('📋 Orden '+id+' abierta');
   renderDashboard();
@@ -3344,6 +3521,47 @@ function buildPhotoEvidence(doc,layout,y,model,options){
   return y+2;
 }
 
+function readPngDimensionsFromDataUrl(dataUrl){
+  var src=String(dataUrl||'').trim();
+  if(src.indexOf('data:image/png;base64,')!==0) return {width:0,height:0};
+  try{
+    var base64=src.split(',')[1]||'';
+    if(!base64) return {width:0,height:0};
+    var bytes=atob(base64.slice(0,96));
+    if(bytes.length<24) bytes=atob(base64);
+    if(bytes.length<24) return {width:0,height:0};
+    var width=((bytes.charCodeAt(16)&255)*16777216)+((bytes.charCodeAt(17)&255)*65536)+((bytes.charCodeAt(18)&255)*256)+(bytes.charCodeAt(19)&255);
+    var height=((bytes.charCodeAt(20)&255)*16777216)+((bytes.charCodeAt(21)&255)*65536)+((bytes.charCodeAt(22)&255)*256)+(bytes.charCodeAt(23)&255);
+    if(width>0 && height>0) return {width:width,height:height};
+  }catch(_err){}
+  return {width:0,height:0};
+}
+
+function drawPdfSignatureImageContain(doc,sigData,format,x,y,w,h){
+  var src=String(sigData||'').trim();
+  if(!src) return false;
+  var dims=readPngDimensionsFromDataUrl(src);
+  var drawW=w;
+  var drawH=h;
+  if(dims.width>0 && dims.height>0){
+    var ratio=Math.min(w/dims.width,h/dims.height);
+    drawW=Math.max(1,dims.width*ratio);
+    drawH=Math.max(1,dims.height*ratio);
+  }else{
+    var fallbackRatio=3.4;
+    drawW=Math.min(w,h*fallbackRatio);
+    drawH=Math.max(1,drawW/fallbackRatio);
+    if(drawH>h){
+      drawH=h;
+      drawW=Math.max(1,drawH*fallbackRatio);
+    }
+  }
+  var drawX=x+((w-drawW)/2);
+  var drawY=y+((h-drawH)/2);
+  doc.addImage(src,format,drawX,drawY,drawW,drawH,undefined,'FAST');
+  return true;
+}
+
 function buildSignatures(doc,layout,y,model,options){
   var opts=options||{};
   y=drawPdfSectionHeading(doc,layout,y,opts.sectionNumber||'06',opts.sectionTitle||'Firmas de conformidad');
@@ -3362,7 +3580,7 @@ function buildSignatures(doc,layout,y,model,options){
     if(sigData){
       try{
         var sigFmt=String(sigData).indexOf('data:image/jpeg')===0?'JPEG':'PNG';
-        doc.addImage(sigData,sigFmt,x+2,y+5,colW-4,13,undefined,'FAST');
+        drawPdfSignatureImageContain(doc,sigData,sigFmt,x+2,y+5,colW-4,13);
       }catch(err){
         console.warn('No se pudo agregar firma al PDF:',err);
       }
@@ -3423,7 +3641,7 @@ function buildSignatures(doc,layout,y,model,options){
       doc.text(safePdfText(sig.label,'Firma').toUpperCase(),x+2,rowY+3.4);
       try{
         var exFmt=String(sig.value).indexOf('data:image/jpeg')===0?'JPEG':'PNG';
-        doc.addImage(sig.value,exFmt,x+2,rowY+5,exColW-4,13,undefined,'FAST');
+        drawPdfSignatureImageContain(doc,sig.value,exFmt,x+2,rowY+5,exColW-4,13);
       }catch(_err){
         doc.setDrawColor(210,210,205);
         doc.line(x+2,rowY+17,x+exColW-2,rowY+17);
@@ -3640,19 +3858,45 @@ async function uploadPendingPhotos(orderId){
 }
 
 function initSig(){
-  var c=document.getElementById('sig-c'),ctx=c.getContext('2d');
-  ctx.strokeStyle='#f97316';ctx.lineWidth=2;ctx.lineCap='round';ctx.lineJoin='round';
-  function pos(e){ var r=c.getBoundingClientRect(),s=e.touches?e.touches[0]:e; return{x:(s.clientX-r.left)*(c.width/r.width),y:(s.clientY-r.top)*(c.height/r.height)}; }
-  c.addEventListener('mousedown',function(e){sigDraw=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
-  c.addEventListener('mousemove',function(e){if(!sigDraw)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();markSig();});
-  c.addEventListener('mouseup',function(){sigDraw=false;});
-  c.addEventListener('mouseleave',function(){sigDraw=false;});
-  c.addEventListener('touchstart',function(e){e.preventDefault();sigDraw=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
-  c.addEventListener('touchmove',function(e){e.preventDefault();if(!sigDraw)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();markSig();},{passive:false});
-  c.addEventListener('touchend',function(){sigDraw=false;});
+  var c=document.getElementById('sig-c');
+  if(!c) return;
+  fixedSignaturePad=createSignaturePad(c,{
+    lineWidth:2.9,
+    strokeStyle:'#111827',
+    onStroke:function(){
+      markSig();
+    },
+    onCommit:function(_value,signed){
+      sigSigned=!!signed;
+      c.classList.toggle('signed',!!signed);
+      var statusEl=document.getElementById('sig-st');
+      if(statusEl) statusEl.textContent=signed?'✓ Firmado':'Sin firmar';
+    }
+  });
+  if(fixedSignaturePad){
+    fixedSignaturePad.resize();
+  }
 }
-function markSig(){ sigSigned=true; document.getElementById('sig-c').classList.add('signed'); document.getElementById('sig-st').textContent='✓ Firmado'; }
-function clearSig(){ var c=document.getElementById('sig-c'); c.getContext('2d').clearRect(0,0,c.width,c.height); sigSigned=false; c.classList.remove('signed'); document.getElementById('sig-st').textContent='Sin firmar'; }
+function markSig(){
+  sigSigned=true;
+  var canvas=document.getElementById('sig-c');
+  var statusEl=document.getElementById('sig-st');
+  if(canvas) canvas.classList.add('signed');
+  if(statusEl) statusEl.textContent='✓ Firmado';
+}
+function clearSig(){
+  if(fixedSignaturePad){
+    fixedSignaturePad.clear();
+    return;
+  }
+  var c=document.getElementById('sig-c');
+  if(!c) return;
+  c.getContext('2d').clearRect(0,0,c.width,c.height);
+  sigSigned=false;
+  c.classList.remove('signed');
+  var statusEl=document.getElementById('sig-st');
+  if(statusEl) statusEl.textContent='Sin firmar';
+}
 
 function collectChecklistReportData(ck,total,done){
   var respuestas={sections:[]},obs=[];
@@ -4107,6 +4351,9 @@ function buildReport(o,locationData){
 
 bindPhotoInput();
 initSig();
+window.addEventListener('resize',function(){
+  refreshVisibleSignaturePads();
+},{passive:true});
 setWorkModeButtonLabel();
 renderDashboard();
 renderTechLiveGpsPanel();
