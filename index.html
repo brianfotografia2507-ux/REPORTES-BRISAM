@@ -4,7 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MantenPro</title>
+<link rel="icon" type="image/png" href="./assets/favicon.png">
+<link rel="apple-touch-icon" href="./assets/favicon.png">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
 :root{
   --bg:#0a0f1a;--surface:#111827;--surface2:#1a2235;--surface3:#1e2c44;
@@ -26,6 +29,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .s-logo-text{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;letter-spacing:-.5px;}
 .s-logo-text span{color:var(--accent);}
 .s-logo-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+.s-logo-main{display:block;max-width:162px;width:100%;height:auto;}
 .s-close-btn{display:none;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px;}
 .s-nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
 .s-section{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:12px 8px 4px;}
@@ -46,6 +50,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;}
 .topbar{padding:14px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:rgba(10,15,26,.85);backdrop-filter:blur(12px);position:sticky;top:0;z-index:40;}
 .topbar-left{display:flex;align-items:center;gap:12px;}
+.topbar-actions{display:flex;align-items:center;gap:8px;}
 .menu-btn{display:none;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px 6px;border-radius:8px;}
 .menu-btn:hover{background:var(--surface2);}
 .topbar-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;}
@@ -54,6 +59,39 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 /* ── PAGES ── */
 .page{display:none;padding:24px;flex:1;}
 .page.on{display:block;}
+
+/* ── LIVE MAP ADMIN ── */
+#pg-map{padding:16px;}
+.map-shell{display:grid;grid-template-columns:320px 1fr;gap:12px;min-height:calc(100vh - 150px);}
+.map-side{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;overflow:auto;display:flex;flex-direction:column;}
+.map-side-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;}
+.map-kpis{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.map-kpi{font-size:11px;padding:4px 9px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);color:var(--muted2);}
+.map-kpi strong{color:var(--text);}
+.map-list{display:flex;flex-direction:column;gap:8px;}
+.map-tech-item{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;cursor:pointer;transition:all .15s;}
+.map-tech-item:hover{border-color:var(--accent);}
+.map-tech-item .name{font-size:13px;font-weight:600;margin-bottom:4px;}
+.map-tech-item .meta{font-size:11px;color:var(--muted2);line-height:1.45;}
+.map-status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+.map-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative;}
+#squad-map{width:100%;height:100%;min-height:520px;}
+.map-overlay-msg{position:absolute;top:12px;left:12px;z-index:500;background:rgba(10,15,26,.82);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;max-width:360px;}
+.leaflet-container{background:#0d1524;color:var(--text);}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#0f1a2e;color:#eaf1ff;border:1px solid #233453;}
+.leaflet-popup-content{font-size:12px;line-height:1.45;margin:10px 12px;}
+.leaflet-tooltip.map-tip{background:#101b30;color:#edf2ff;border:1px solid #314566;border-radius:8px;padding:6px 8px;box-shadow:none;}
+.map-marker-dot{width:14px;height:14px;border-radius:50%;border:2px solid #0b111d;box-shadow:0 0 0 2px rgba(10,15,26,.65);}
+.map-marker-green{background:#22c55e;}
+.map-marker-yellow{background:#eab308;}
+.map-marker-blue{background:#3b82f6;}
+.map-marker-orange{background:#f97316;}
+.map-marker-red{background:#ef4444;}
+
+/* ── BRANCH GPS ── */
+.branch-geo-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.branch-geo-map{height:190px;border-radius:10px;border:1px solid var(--border);overflow:hidden;background:var(--surface2);}
+.branch-geo-note{font-size:11px;color:var(--muted);}
 
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .18s;font-family:'DM Sans',sans-serif;}
@@ -79,6 +117,20 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;}
 .stat-val{font-family:'Syne',sans-serif;font-size:28px;font-weight:700;}
 .stat-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+.dash-filters{display:flex;gap:8px;flex-wrap:wrap;margin:-6px 0 14px;}
+.dash-filters .fs,.dash-filters .fi{width:190px;}
+.dash-tech-card{padding:14px;}
+.dash-tech-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.dash-tech-name{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;}
+.dash-tech-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.dash-tech-eff{font-size:11px;color:var(--muted);margin-top:5px;}
+.dash-chart{padding:14px 16px;display:flex;flex-direction:column;gap:10px;}
+.dash-chart-row{display:flex;flex-direction:column;gap:4px;}
+.dash-chart-top{display:flex;justify-content:space-between;align-items:center;font-size:12px;}
+.dash-chart-top strong{font-size:13px;}
+.dash-bar{height:8px;background:var(--surface2);border:1px solid var(--border);border-radius:999px;overflow:hidden;}
+.dash-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));}
+.dash-chart-meta{font-size:11px;color:var(--muted);}
 
 /* ── SEC LABEL ── */
 .sec{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
@@ -143,6 +195,17 @@ tr:hover td{background:rgba(26,34,53,.5);}
 
 /* ── TECH PAGE ── */
 .tech-hdr{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin-bottom:18px;display:flex;align-items:center;gap:14px;}
+.tech-live-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:-6px 0 16px;display:flex;flex-direction:column;gap:8px;}
+.tech-live-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted2);}
+.tech-live-row strong{font-size:12px;color:var(--text);font-weight:600;}
+.live-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--border);border-radius:999px;font-size:11px;background:var(--surface2);color:var(--muted2);}
+.live-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);}
+.live-pill.ok{color:var(--green);border-color:rgba(34,197,94,.35);}
+.live-pill.ok .dot{background:var(--green);}
+.live-pill.warn{color:var(--yellow);border-color:rgba(234,179,8,.35);}
+.live-pill.warn .dot{background:var(--yellow);}
+.live-pill.err{color:var(--red);border-color:rgba(239,68,68,.35);}
+.live-pill.err .dot{background:var(--red);}
 .wo-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:14px;}
 .wo-top{padding:18px;background:linear-gradient(135deg,rgba(249,115,22,.08),transparent);border-bottom:1px solid var(--border);}
 .wo-id{font-size:10px;color:var(--accent);font-weight:600;letter-spacing:1px;text-transform:uppercase;}
@@ -181,8 +244,32 @@ tr:hover td{background:rgba(26,34,53,.5);}
 .ph-slot.filled img{width:100%;height:100%;object-fit:cover;}
 
 /* ── SIGNATURE ── */
-canvas.sig{width:100%;height:110px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);cursor:crosshair;touch-action:none;display:block;}
-canvas.sig.signed{border-color:var(--green);}
+.sig-inline-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px;}
+.sig-inline-preview{width:100%;height:130px;border-radius:10px;border:1px dashed var(--border);background:rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.sig-inline-preview img{width:100%;height:100%;object-fit:contain;display:none;background:#fff;}
+.sig-inline-preview.has-signature img{display:block;}
+.sig-inline-preview.has-signature .sig-inline-empty{display:none;}
+.sig-inline-empty{font-size:12px;color:var(--muted);}
+.sig-inline-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:8px;}
+
+.sig-modal{max-width:none;width:calc(100vw - 20px);height:calc(100vh - 20px);display:flex;flex-direction:column;}
+.sig-modal .m-body{padding:12px 16px;display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;}
+.sig-modal .m-foot{padding:12px 16px;flex-wrap:wrap;}
+.sig-modal-hint{font-size:12px;color:var(--muted);margin:0;}
+.sig-modal-canvas-wrap{flex:1;min-height:240px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px;}
+canvas.sig-modal-canvas{
+  width:100%;
+  height:100%;
+  min-height:220px;
+  border-radius:10px;
+  border:1px solid #e5e7eb;
+  background:#ffffff;
+  cursor:crosshair;
+  touch-action:none;
+  display:block;
+}
+.sig-modal-status{font-size:12px;color:var(--muted2);}
+canvas.sig-modal-canvas.signed{border-color:rgba(34,197,94,.65);}
 
 /* ── REPORT ── */
 .rpt{background:#fff;color:#111827;border-radius:14px;padding:28px;font-family:'DM Sans',sans-serif;}
@@ -215,6 +302,23 @@ canvas.sig.signed{border-color:var(--green);}
 .empty{text-align:center;padding:40px 20px;color:var(--muted);}
 .empty-ico{font-size:36px;margin-bottom:10px;}
 
+/* ── AUTH ── */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:22px;position:relative;z-index:1;}
+.auth-card{width:100%;max-width:460px;background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:22px;}
+.auth-brand{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;letter-spacing:-.5px;}
+.auth-brand span{color:var(--accent);}
+.auth-brand-logo{display:block;max-width:300px;width:100%;height:auto;margin-bottom:8px;}
+.auth-sub{font-size:12px;color:var(--muted);margin:4px 0 16px;}
+.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.auth-tab{padding:9px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--muted2);font-size:12px;cursor:pointer;font-weight:600;}
+.auth-tab.on{color:var(--accent);border-color:rgba(249,115,22,.3);background:var(--adim);}
+.auth-form{display:none;}
+.auth-form.on{display:block;}
+.auth-msg{font-size:12px;margin-top:8px;min-height:16px;color:var(--muted);}
+.auth-msg.error{color:var(--red);}
+.auth-msg.success{color:var(--green);}
+.hidden-by-role{display:none !important;}
+
 /* ════ CHECKLIST BUILDER ════ */
 .cl-builder{display:flex;flex-direction:column;gap:10px;}
 
@@ -225,6 +329,10 @@ canvas.sig.signed{border-color:var(--green);}
 .cl-section-title-input{flex:1;background:transparent;border:none;outline:none;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text);}
 .cl-section-title-input::placeholder{color:var(--muted);}
 .cl-section-body{padding:10px 14px;}
+.cl-move-wrap{display:flex;gap:4px;margin-left:auto;}
+.cl-move-btn{width:26px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface3);color:var(--muted2);cursor:pointer;font-size:12px;line-height:1;}
+.cl-move-btn:hover{border-color:var(--accent);color:var(--accent);}
+.cl-move-btn:disabled{opacity:.35;cursor:not-allowed;}
 
 /* Items within section */
 .cl-sec-items{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
@@ -249,6 +357,17 @@ canvas.sig.signed{border-color:var(--green);}
 .add-section-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
 .add-section-btn{display:flex;align-items:center;gap:5px;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;border:1px dashed var(--border);background:transparent;color:var(--muted2);transition:all .15s;font-family:'DM Sans',sans-serif;}
 .add-section-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--adim);}
+.req-toggle{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted2);margin:4px 0 8px;}
+.req-toggle input{accent-color:var(--accent);}
+.mc-opt-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
+.mc-opt-row{display:flex;align-items:center;gap:6px;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:7px 8px;}
+.mc-opt-row .fi{padding:6px 9px;font-size:12px;}
+.mc-opt-actions{display:flex;gap:4px;}
+.mc-choice-grid{display:flex;flex-direction:column;gap:7px;margin-top:6px;}
+.mc-choice-item{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);}
+.mc-choice-item input[type="radio"]{accent-color:var(--accent);}
+.sig-dyn-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;}
+.sig-dyn-status{font-size:11px;color:var(--muted2);}
 
 /* ── MOBILE ── */
 @media(max-width:720px){
@@ -260,14 +379,73 @@ canvas.sig.signed{border-color:var(--green);}
   .stats{grid-template-columns:repeat(2,1fr);}
   .frow{grid-template-columns:1fr;}
   .rgrid{grid-template-columns:1fr;}
+  .sig-inline-preview{height:118px;}
+  .sig-modal{width:100vw;height:100vh;border-radius:0;}
+  .sig-modal .m-body{padding:10px 12px;}
+  .sig-modal .m-foot{padding:10px 12px;}
+  canvas.sig-modal-canvas{min-height:180px;}
   .page{padding:16px;}
   .topbar{padding:12px 16px;}
   .add-section-row{gap:6px;}
   .add-section-btn{font-size:11px;padding:6px 10px;}
+  .auth-card{padding:16px;}
+  .dash-filters .fs,.dash-filters .fi{width:100%;}
+  .map-shell{grid-template-columns:1fr;min-height:auto;}
+  .map-side{max-height:280px;}
+  #squad-map{min-height:420px;}
+  .branch-geo-grid{grid-template-columns:1fr;}
 }
 </style>
 </head>
 <body>
+<div id="auth-view" class="auth-wrap">
+  <div class="auth-card">
+    <img class="auth-brand-logo" src="./assets/logo-main.png" alt="BRISAM">
+    <div class="auth-sub">Ingresa para administrar reportes y órdenes.</div>
+    <div class="auth-tabs">
+      <button class="auth-tab on" id="tab-login" type="button">Iniciar sesión</button>
+      <button class="auth-tab" id="tab-register" type="button">Registrarme</button>
+    </div>
+
+    <form class="auth-form on" id="login-form">
+      <div class="fg">
+        <label class="fl">Email</label>
+        <input class="fi" id="login-email" type="email" placeholder="correo@empresa.com">
+      </div>
+      <div class="fg">
+        <label class="fl">Contraseña</label>
+        <input class="fi" id="login-password" type="password" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" id="login-submit" type="submit" style="width:100%;justify-content:center;">Entrar</button>
+    </form>
+
+    <form class="auth-form" id="register-form">
+      <div class="fg">
+        <label class="fl">Nombre completo</label>
+        <input class="fi" id="register-name" placeholder="Nombre Apellido">
+      </div>
+      <div class="fg">
+        <label class="fl">Email</label>
+        <input class="fi" id="register-email" type="email" placeholder="correo@empresa.com">
+      </div>
+      <div class="frow">
+        <div class="fg">
+          <label class="fl">Contraseña</label>
+          <input class="fi" id="register-password" type="password" placeholder="Mínimo 6 caracteres">
+        </div>
+        <div class="fg">
+          <label class="fl">Confirmar contraseña</label>
+          <input class="fi" id="register-password-confirm" type="password" placeholder="Repite contraseña">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="register-submit" type="submit" style="width:100%;justify-content:center;">Crear cuenta</button>
+    </form>
+
+    <div class="auth-msg" id="auth-msg"></div>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
 <div class="sb-backdrop" id="sb-backdrop" onclick="closeSidebar()"></div>
 <div class="shell">
 
@@ -275,28 +453,30 @@ canvas.sig.signed{border-color:var(--green);}
 <aside class="sidebar" id="sidebar">
   <div class="s-logo">
     <div>
-      <div class="s-logo-text">Manten<span>Pro</span></div>
+      <img class="s-logo-main" src="./assets/logo-main.png" alt="BRISAM">
       <div class="s-logo-sub">Sistema de Mantenimiento</div>
     </div>
     <button class="s-close-btn" onclick="closeSidebar()">✕</button>
   </div>
   <nav class="s-nav">
     <div class="s-section">Principal</div>
-    <button class="s-item on"  id="ni-dashboard"   onclick="goTo('dashboard',this)"><span class="ico">📊</span>Dashboard</button>
-    <button class="s-item"     id="ni-orders"       onclick="goTo('orders',this)"><span class="ico">📋</span>Órdenes<span class="s-badge" id="nb-pend">0</span></button>
-    <button class="s-item"     id="ni-tech"         onclick="goTo('tech',this)"><span class="ico">🔧</span>Vista Técnico</button>
-    <button class="s-item"     id="ni-report"       onclick="goTo('report',this)"><span class="ico">📄</span>Reportes</button>
+    <button class="s-item on"  id="ni-dashboard"   data-role="administrador" onclick="goTo('dashboard',this)"><span class="ico">📊</span>Dashboard</button>
+    <button class="s-item"     id="ni-map"         data-role="administrador" onclick="goTo('map',this)"><span class="ico">📍</span>Mapa de Cuadrillas</button>
+    <button class="s-item"     id="ni-orders"      data-role="administrador" onclick="goTo('orders',this)"><span class="ico">📋</span>Órdenes<span class="s-badge" id="nb-pend">0</span></button>
+    <button class="s-item"     id="ni-tech"        data-role="tecnico" onclick="goTo('tech',this)"><span class="ico">🔧</span>Vista Técnico</button>
+    <button class="s-item"     id="ni-tech-checklists" data-role="tecnico" onclick="goTo('tech-checklists',this)"><span class="ico">🧾</span>Checklists</button>
+    <button class="s-item"     id="ni-report"      data-role="tecnico,administrador" onclick="goTo('report',this)"><span class="ico">📄</span>Reportes</button>
     <div class="s-section">Catálogos</div>
-    <button class="s-item"     id="ni-clients"      onclick="goTo('clients',this)"><span class="ico">🏢</span>Clientes</button>
-    <button class="s-item"     id="ni-branches"     onclick="goTo('branches',this)"><span class="ico">📍</span>Sucursales</button>
-    <button class="s-item"     id="ni-technicians"  onclick="goTo('technicians',this)"><span class="ico">👷</span>Técnicos</button>
-    <button class="s-item"     id="ni-equipment"    onclick="goTo('equipment',this)"><span class="ico">⚙️</span>Equipos</button>
-    <button class="s-item"     id="ni-checklists"   onclick="goTo('checklists',this)"><span class="ico">✅</span>Check-lists</button>
+    <button class="s-item"     id="ni-clients"      data-role="administrador" onclick="goTo('clients',this)"><span class="ico">🏢</span>Clientes</button>
+    <button class="s-item"     id="ni-branches"     data-role="administrador" onclick="goTo('branches',this)"><span class="ico">📍</span>Sucursales</button>
+    <button class="s-item"     id="ni-technicians"  data-role="administrador" onclick="goTo('technicians',this)"><span class="ico">👷</span>Técnicos</button>
+    <button class="s-item"     id="ni-equipment"    data-role="administrador" onclick="goTo('equipment',this)"><span class="ico">⚙️</span>Equipos</button>
+    <button class="s-item"     id="ni-checklists"   data-role="administrador" onclick="goTo('checklists',this)"><span class="ico">✅</span>Check-lists</button>
   </nav>
   <div class="s-foot">
     <div class="s-user">
-      <div class="s-av">BR</div>
-      <div><div style="font-size:12px;font-weight:500;">Brian</div><div style="font-size:10px;color:var(--muted);">Administrador</div></div>
+      <div class="s-av" id="s-user-av">MP</div>
+      <div><div style="font-size:12px;font-weight:500;" id="s-user-name">Invitado</div><div style="font-size:10px;color:var(--muted);" id="s-user-role">Sin sesión</div></div>
     </div>
   </div>
 </aside>
@@ -308,7 +488,10 @@ canvas.sig.signed{border-color:var(--green);}
       <button class="menu-btn" onclick="openSidebar()">☰</button>
       <div class="topbar-title" id="pg-title">Dashboard</div>
     </div>
-    <div id="pg-actions"></div>
+    <div class="topbar-actions">
+      <div id="pg-actions"></div>
+      <button class="btn btn-ghost btn-sm" id="btn-logout" onclick="logoutUser()" style="display:none;">Salir</button>
+    </div>
   </div>
 
   <!-- DASHBOARD -->
@@ -319,7 +502,17 @@ canvas.sig.signed{border-color:var(--green);}
       <div class="stat grn"><div class="stat-lbl">Completadas</div><div class="stat-val" id="st-done">0</div><div class="stat-sub">Con reporte</div></div>
       <div class="stat yel"><div class="stat-lbl">Pendientes</div><div class="stat-val" id="st-pend">0</div><div class="stat-sub">Sin iniciar</div></div>
     </div>
-    <div class="sec">Órdenes recientes</div>
+    <div class="dash-filters">
+      <select class="fs" id="dash-tech" onchange="renderDashboard()"></select>
+      <input class="fi" id="dash-from" type="date" onchange="renderDashboard()">
+      <input class="fi" id="dash-to" type="date" onchange="renderDashboard()">
+      <button class="btn btn-ghost btn-sm" onclick="clearDashboardFilters()">Limpiar filtros</button>
+    </div>
+    <div class="sec">Rendimiento por técnico</div>
+    <div class="cards" id="dash-tech-cards"></div>
+    <div class="sec" style="margin-top:14px;">Gráfica de eficiencia</div>
+    <div class="tbl-wrap"><div id="dash-tech-chart" class="dash-chart"></div></div>
+    <div class="sec" style="margin-top:14px;">Órdenes recientes</div>
     <div class="tbl-wrap"><table>
       <thead><tr><th>ID</th><th>Tipo</th><th>Cliente / Sucursal</th><th>Técnico</th><th>Estado</th><th>Fecha</th></tr></thead>
       <tbody id="tb-dash"></tbody>
@@ -340,9 +533,17 @@ canvas.sig.signed{border-color:var(--green);}
       <div class="av" id="tv-av" style="width:44px;height:44px;border-radius:12px;font-size:16px;background:linear-gradient(135deg,var(--accent),#c2410c);">JR</div>
       <div style="flex:1;">
         <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;" id="tv-name">—</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;"></span>Técnico de campo · En línea</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="tv-subline"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;"></span>Técnico de campo · En línea</div>
       </div>
       <select class="fs" style="width:auto;" id="tv-sel" onchange="switchTech(this.value)"></select>
+    </div>
+    <div class="tech-live-card" id="tv-live-card">
+      <div class="tech-live-row">
+        <strong id="tv-gps-active">📍 GPS inactivo</strong>
+        <span class="live-pill" id="tv-live-conn-pill"><span class="dot"></span><span id="tv-live-conn-label">Sin conexión</span></span>
+      </div>
+      <div class="tech-live-row"><span>Última sincronización</span><strong id="tv-gps-last">—</strong></div>
+      <div class="tech-live-row"><span>Estado conexión</span><strong id="tv-gps-conn">Sin conexión</strong></div>
     </div>
     <div class="sec">Órdenes pendientes</div>
     <div id="tv-list"></div>
@@ -362,15 +563,24 @@ canvas.sig.signed{border-color:var(--green);}
           <div id="wd-dynamic"></div>
           <div class="sec" style="margin-top:18px;">Evidencia fotográfica</div>
           <div class="ph-grid">
-            <div class="ph-slot" onclick="addPhoto(this)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
-            <div class="ph-slot" onclick="addPhoto(this)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
-            <div class="ph-slot" onclick="addPhoto(this)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
+            <div class="ph-slot" data-slot-index="0" onclick="addPhoto(this,0)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
+            <div class="ph-slot" data-slot-index="1" onclick="addPhoto(this,1)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
+            <div class="ph-slot" data-slot-index="2" onclick="addPhoto(this,2)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
           </div>
+          <input id="ph-file" type="file" accept="image/*" style="display:none;">
           <div class="sec" style="margin-top:18px;">Firma del responsable</div>
-          <canvas class="sig" id="sig-c" width="600" height="110"></canvas>
-          <div style="display:flex;gap:8px;margin-top:7px;align-items:center;">
-            <button class="btn btn-ghost btn-sm" onclick="clearSig()">Limpiar firma</button>
-            <span style="font-size:12px;color:var(--muted);" id="sig-st">Sin firmar</span>
+          <div class="sig-inline-card">
+            <div class="sig-inline-preview" id="sig-fixed-preview-wrap">
+              <img id="sig-fixed-preview" alt="Firma del responsable">
+              <span class="sig-inline-empty">Sin firma capturada</span>
+            </div>
+            <div class="sig-inline-actions">
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn btn-primary btn-sm" onclick="openFixedSignatureModal()">Firmar</button>
+                <button class="btn btn-ghost btn-sm" onclick="clearSig()">Limpiar firma</button>
+              </div>
+              <span style="font-size:12px;color:var(--muted);" id="sig-st">Sin firmar</span>
+            </div>
           </div>
         </div>
       </div>
@@ -378,9 +588,38 @@ canvas.sig.signed{border-color:var(--green);}
     </div>
   </div>
 
+  <!-- TECH CHECKLISTS -->
+  <div class="page" id="pg-tech-checklists">
+    <div class="sec">Checklists publicados</div>
+    <div class="cards" id="tech-checklist-grid"></div>
+  </div>
+
   <!-- REPORT -->
   <div class="page" id="pg-report">
     <div id="rpt-content"><div class="empty"><div class="empty-ico">📋</div>Cierra una orden para generar el reporte</div></div>
+  </div>
+
+  <!-- MAP -->
+  <div class="page" id="pg-map">
+    <div class="map-shell">
+      <aside class="map-side">
+        <div class="map-side-head">
+          <div class="sec" style="margin:0;">Cuadrillas en vivo</div>
+        </div>
+        <div class="map-kpis">
+          <span class="map-kpi">Total: <strong id="map-kpi-total">0</strong></span>
+          <span class="map-kpi">Online: <strong id="map-kpi-online">0</strong></span>
+          <span class="map-kpi">Offline: <strong id="map-kpi-offline">0</strong></span>
+        </div>
+        <div class="map-list" id="map-tech-list">
+          <div class="empty" style="padding:20px 10px;"><div class="empty-ico">📡</div>Esperando ubicaciones...</div>
+        </div>
+      </aside>
+      <section class="map-wrap">
+        <div id="squad-map"></div>
+        <div class="map-overlay-msg" id="map-overlay-msg">Cargando mapa en tiempo real...</div>
+      </section>
+    </div>
   </div>
 
   <!-- CLIENTS -->
@@ -406,6 +645,7 @@ canvas.sig.signed{border-color:var(--green);}
 
   <!-- CHECKLISTS -->
   <div class="page" id="pg-checklists"><div class="cards" id="grid-checklists"></div></div>
+</div>
 </div>
 </div>
 
@@ -458,6 +698,22 @@ canvas.sig.signed{border-color:var(--green);}
     <div class="frow">
       <div class="fg"><label class="fl">Contacto</label><input class="fi" id="b-contact" placeholder="Gerente / encargado"></div>
       <div class="fg"><label class="fl">Teléfono</label><input class="fi" id="b-phone" placeholder="+52 81..."></div>
+    </div>
+    <div class="fg">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+        <label class="fl" style="margin:0;">Ubicación GPS</label>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="useCurrentBranchLocation()">📍 Usar ubicación actual</button>
+      </div>
+      <div class="branch-geo-grid">
+        <input class="fi" id="b-lat" type="number" step="0.000001" placeholder="Latitud">
+        <input class="fi" id="b-lng" type="number" step="0.000001" placeholder="Longitud">
+      </div>
+      <div style="margin-top:10px;">
+        <label class="fl">Radio geofence (metros)</label>
+        <input class="fi" id="b-geofence-radius" type="number" min="20" step="1" value="120">
+      </div>
+      <div class="branch-geo-note" style="margin-top:6px;">Se usará para validar proximidad del servicio en campo.</div>
+      <div class="branch-geo-map" id="b-geo-map" style="margin-top:10px;"></div>
     </div>
     <div class="fg"><label class="fl">Estado</label><select class="fs" id="b-status"><option value="active">Activa</option><option value="inactive">Inactiva</option></select></div>
   </div>
@@ -518,6 +774,13 @@ canvas.sig.signed{border-color:var(--green);}
       <div class="fg"><label class="fl">Tipo de servicio</label>
         <select class="fs" id="cl-type"><option>Mantenimiento Preventivo</option><option>Mantenimiento Correctivo</option><option>Inspección</option><option>General</option></select></div>
     </div>
+    <div class="fg" style="margin-bottom:14px;">
+      <label class="fl">Publicado para técnicos</label>
+      <select class="fs" id="cl-published">
+        <option value="false">No publicado</option>
+        <option value="true">Publicado</option>
+      </select>
+    </div>
 
     <!-- Builder area -->
     <div class="sec">Estructura del check-list</div>
@@ -528,8 +791,10 @@ canvas.sig.signed{border-color:var(--green);}
       <button class="add-section-btn" onclick="addSection('checklist')">☑️ Agregar sección de tareas</button>
       <button class="add-section-btn" onclick="addSection('fields')">📝 Agregar sección de campos</button>
       <button class="add-section-btn" onclick="addSection('textarea')">💬 Agregar área de texto</button>
+      <button class="add-section-btn" onclick="addSection('multiple_choice')">🔘 Agregar opción múltiple</button>
+      <button class="add-section-btn" onclick="addSection('signature')">✍️ Agregar firma</button>
     </div>
-    <p style="font-size:11px;color:var(--muted);margin-top:10px;">💡 Las <b>secciones de tareas</b> son check-lists de actividades. Las <b>secciones de campos</b> incluyen entradas personalizadas (texto, número, selector). Las <b>áreas de texto</b> son para observaciones libres.</p>
+    <p style="font-size:11px;color:var(--muted);margin-top:10px;">💡 Puedes combinar tareas, campos, texto libre, opción múltiple y firmas dinámicas para construir formularios personalizados.</p>
   </div>
   <div class="m-foot"><button class="btn btn-ghost" onclick="closeM('m-cl')">Cancelar</button><button class="btn btn-primary" onclick="saveCl()">Guardar Check-list</button></div>
 </div></div>
@@ -541,8 +806,33 @@ canvas.sig.signed{border-color:var(--green);}
   <div class="m-foot"><button class="btn btn-ghost" onclick="closeM('m-confirm')">Cancelar</button><button class="btn btn-danger" id="confirm-ok">Eliminar</button></div>
 </div></div>
 
+<!-- FULLSCREEN SIGNATURE -->
+<div class="overlay" id="m-sign"><div class="modal sig-modal">
+  <div class="m-head">
+    <div>
+      <div class="m-title" id="sig-modal-title">Capturar firma</div>
+      <div style="font-size:12px;color:var(--muted);" id="sig-modal-sub">Traza tu firma y pulsa Guardar firma</div>
+    </div>
+    <button class="m-close" onclick="closeSignatureModal()">✕</button>
+  </div>
+  <div class="m-body">
+    <p class="sig-modal-hint">Firma en toda la pantalla para mayor precisión.</p>
+    <div class="sig-modal-canvas-wrap">
+      <canvas id="sig-modal-canvas" class="sig-modal-canvas"></canvas>
+    </div>
+    <div class="sig-modal-status" id="sig-modal-status">Sin firmar</div>
+  </div>
+  <div class="m-foot">
+    <button class="btn btn-ghost" onclick="clearSignatureModalCanvas()">Limpiar</button>
+    <button class="btn btn-ghost" onclick="closeSignatureModal()">Cancelar</button>
+    <button class="btn btn-primary" id="sig-modal-save" onclick="saveSignatureModal()">Guardar firma</button>
+  </div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 // ══════════════ DATA ══════════════
 var DB = {
@@ -622,8 +912,521 @@ var DB = {
   nextNum:4
 };
 
-var curOrderId=null, chkState={}, sigDraw=false, sigSigned=false, photoCnt=0;
+var curOrderId=null, chkState={}, sigSigned=false;
+var currentWorkMode='order';
+var currentFreeChecklistId='';
 var tmpSections=[];
+var dynamicSignatureState={};
+var fixedSignatureData='';
+var signatureModalPad=null;
+var signatureModalContext={type:'fixed',key:'fixed',label:'Firma del responsable'};
+var signatureModalDraft={signed:false,value:''};
+window.dashboardReportsCache=Array.isArray(window.dashboardReportsCache)?window.dashboardReportsCache:[];
+var techLiveGpsState={
+  active:false,
+  lastSync:'',
+  connection:'Sin conexión',
+  error:'',
+  gps:'inactive'
+};
+
+function formatLiveSyncLabel(iso){
+  if(!iso) return '—';
+  var d=new Date(iso);
+  if(isNaN(d.getTime())) return '—';
+  return d.toLocaleString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function renderTechLiveGpsPanel(){
+  var activeEl=document.getElementById('tv-gps-active');
+  var lastEl=document.getElementById('tv-gps-last');
+  var connEl=document.getElementById('tv-gps-conn');
+  var pill=document.getElementById('tv-live-conn-pill');
+  var pillLabel=document.getElementById('tv-live-conn-label');
+  if(!activeEl || !lastEl || !connEl || !pill || !pillLabel) return;
+  activeEl.textContent=techLiveGpsState.active?'📍 GPS activo':'📍 GPS inactivo';
+  lastEl.textContent=formatLiveSyncLabel(techLiveGpsState.lastSync);
+  connEl.textContent=techLiveGpsState.connection||'Sin conexión';
+  pillLabel.textContent=techLiveGpsState.connection||'Sin conexión';
+  pill.classList.remove('ok','warn','err');
+  if(techLiveGpsState.active && (!techLiveGpsState.error || techLiveGpsState.error==='')){
+    pill.classList.add('ok');
+  }else if(techLiveGpsState.gps==='denied' || techLiveGpsState.gps==='unsupported'){
+    pill.classList.add('warn');
+  }else{
+    pill.classList.add('err');
+  }
+}
+
+window.updateLiveGpsUi=function updateLiveGpsUi(state){
+  techLiveGpsState=Object.assign({},techLiveGpsState,state||{});
+  renderTechLiveGpsPanel();
+};
+
+window.getCurrentActiveOrderId=function getCurrentActiveOrderId(){
+  return curOrderId||'';
+};
+
+window.getTechLiveStatus=function getTechLiveStatus(){
+  return curOrderId?'en_servicio':'disponible';
+};
+
+function notifyLiveTrackingContext(){
+  if(typeof window.notifyLiveTrackingContextChanged!=='function') return;
+  Promise.resolve(window.notifyLiveTrackingContextChanged()).catch(function(err){
+    console.warn('No se pudo sincronizar contexto live:',err);
+  });
+}
+
+function checklistToMs(value){
+  if(!value) return 0;
+  if(typeof value.toDate==='function') return value.toDate().getTime();
+  if(typeof value.seconds==='number') return value.seconds*1000;
+  var n=Date.parse(value);
+  return isNaN(n)?0:n;
+}
+
+function formatChecklistDate(value){
+  var ms=checklistToMs(value);
+  if(!ms) return 'Sin fecha';
+  return new Date(ms).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
+}
+
+function normalizeChecklistDoc(cl){
+  var data=cl||{};
+  var sections=Array.isArray(data.sections)?JSON.parse(JSON.stringify(data.sections)):[];
+  sections=sections.map(function(sec){
+    var out=sec||{};
+    out.id=String(out.id||uid());
+    if(out.type==='multiple_choice'){
+      out.label=String(out.label||out.title||'Pregunta');
+      out.options=Array.isArray(out.options)?out.options:[];
+      out.required=out.required===true;
+    }
+    if(out.type==='signature'){
+      out.label=String(out.label||out.title||'Firma');
+      out.required=out.required===true;
+    }
+    return out;
+  });
+  return {
+    id:String(data.id||uid()),
+    name:String(data.name||'Checklist').trim(),
+    type:String(data.type||'General').trim()||'General',
+    published:data.published===true,
+    sections:sections,
+    createdAt:data.createdAt||null,
+    updatedAt:data.updatedAt||null,
+    createdBy:data.createdBy||''
+  };
+}
+
+function normalizeBranchDoc(branch){
+  var data=branch||{};
+  var lat=Number(data.lat);
+  var lng=Number(data.lng);
+  var radius=Number(data.geofenceRadius);
+  return {
+    id:String(data.id||uid()),
+    clientId:String(data.clientId||''),
+    name:String(data.name||'Sucursal'),
+    address:String(data.address||''),
+    contact:String(data.contact||''),
+    phone:String(data.phone||''),
+    status:data.status==='inactive'?'inactive':'active',
+    lat:isFinite(lat)?lat:null,
+    lng:isFinite(lng)?lng:null,
+    geofenceRadius:(isFinite(radius)&&radius>0)?Math.round(radius):120,
+    createdAt:data.createdAt||null,
+    updatedAt:data.updatedAt||null
+  };
+}
+
+window.setFirestoreChecklistsData=function setFirestoreChecklistsData(items){
+  var list=Array.isArray(items)?items.map(normalizeChecklistDoc):[];
+  if(!list.length){
+    DB.checklists=[];
+  }else{
+    DB.checklists=list;
+  }
+  renderChecklists();
+  renderTechChecklistPage();
+};
+
+window.setFirestoreBranchesData=function setFirestoreBranchesData(items){
+  var list=Array.isArray(items)?items.map(normalizeBranchDoc):[];
+  DB.branches=list;
+  renderBranches();
+  renderEquipment();
+};
+
+var APP_ACTIVE_PAGE='dashboard';
+var MAP_STATE={
+  map:null,
+  markers:{},
+  locations:{},
+  unsubscribe:null,
+  hasFitted:false
+};
+
+function mapMs(value){
+  if(!value) return 0;
+  if(typeof value.toDate==='function') return value.toDate().getTime();
+  if(typeof value.seconds==='number') return value.seconds*1000;
+  var n=Date.parse(value);
+  return isNaN(n)?0:n;
+}
+
+function mapEscapeHtml(value){
+  return String(value==null?'':value)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function mapStatusMeta(status){
+  var map={
+    disponible:{label:'Disponible',className:'map-marker-green',dot:'🟢'},
+    en_camino:{label:'En camino',className:'map-marker-yellow',dot:'🟡'},
+    trabajando:{label:'Trabajando',className:'map-marker-blue',dot:'🔵'},
+    pausado:{label:'Pausado',className:'map-marker-orange',dot:'🟠'},
+    offline:{label:'Offline',className:'map-marker-red',dot:'🔴'}
+  };
+  return map[status]||map.disponible;
+}
+
+function getMapStatus(loc){
+  var raw=String(loc&&loc.status?loc.status:'').toLowerCase();
+  var isOffline=!loc || loc.online===false || ((Date.now()-mapMs(loc.timestamp))>300000);
+  if(isOffline) return 'offline';
+  if(raw.indexOf('camino')!==-1) return 'en_camino';
+  if(raw.indexOf('paus')!==-1) return 'pausado';
+  if(raw.indexOf('trabaj')!==-1 || raw.indexOf('servicio')!==-1 || raw==='en_servicio') return 'trabajando';
+  if(raw.indexOf('dispon')!==-1) return 'disponible';
+  return loc.ordenActiva?'trabajando':'disponible';
+}
+
+function formatMapSync(value){
+  var ms=mapMs(value);
+  if(!ms) return 'Sin sincronización';
+  return new Date(ms).toLocaleString('es-MX',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function mapOverlay(msg,isError){
+  var el=document.getElementById('map-overlay-msg');
+  if(!el) return;
+  el.textContent=msg||'';
+  el.style.display=msg?'block':'none';
+  el.style.borderColor=isError?'rgba(239,68,68,.45)':'var(--border)';
+}
+
+function ensureAdminMapInstance(){
+  if(MAP_STATE.map) return true;
+  var target=document.getElementById('squad-map');
+  if(!target) return false;
+  if(typeof window.L==='undefined'){
+    mapOverlay('Leaflet no está disponible en este momento.',true);
+    return false;
+  }
+  MAP_STATE.map=L.map(target,{zoomControl:true,preferCanvas:true,minZoom:3});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    attribution:'&copy; OpenStreetMap &copy; CARTO',
+    subdomains:'abcd',
+    maxZoom:20
+  }).addTo(MAP_STATE.map);
+  MAP_STATE.map.setView([25.6866,-100.3161],11);
+  setTimeout(function(){ if(MAP_STATE.map) MAP_STATE.map.invalidateSize(); },140);
+  return true;
+}
+
+function buildMapPopup(loc){
+  var status=getMapStatus(loc);
+  var meta=mapStatusMeta(status);
+  return '<div>'
+    +'<div style="font-size:13px;font-weight:700;margin-bottom:4px;">'+mapEscapeHtml(loc.nombre||loc.email||loc.uid||'Técnico')+'</div>'
+    +'<div><strong>Estado:</strong> '+meta.dot+' '+meta.label+'</div>'
+    +'<div><strong>Orden activa:</strong> '+mapEscapeHtml(loc.ordenActiva||'Sin orden')+'</div>'
+    +'<div><strong>Última actualización:</strong> '+mapEscapeHtml(formatMapSync(loc.timestamp))+'</div>'
+    +'<div><strong>Precisión:</strong> '+(typeof loc.accuracy==='number'?loc.accuracy+' m':'—')+'</div>'
+    +'</div>';
+}
+
+function buildMapTooltip(loc){
+  var status=getMapStatus(loc);
+  var meta=mapStatusMeta(status);
+  return '<div style="min-width:190px;">'
+    +'<div style="font-weight:700;margin-bottom:2px;">'+mapEscapeHtml(loc.nombre||loc.email||'Técnico')+'</div>'
+    +'<div>'+meta.dot+' '+meta.label+'</div>'
+    +'<div>Orden: '+mapEscapeHtml(loc.ordenActiva||'Sin orden')+'</div>'
+    +'<div>Sync: '+mapEscapeHtml(formatMapSync(loc.timestamp))+'</div>'
+    +'<div>Precisión: '+(typeof loc.accuracy==='number'?loc.accuracy+' m':'—')+'</div>'
+    +'</div>';
+}
+
+function buildMarkerIcon(status){
+  var meta=mapStatusMeta(status);
+  return L.divIcon({
+    className:'',
+    html:'<div class="map-marker-dot '+meta.className+'"></div>',
+    iconSize:[14,14],
+    iconAnchor:[7,7]
+  });
+}
+
+function upsertTechMarker(loc){
+  if(!MAP_STATE.map) return;
+  if(typeof loc.lat!=='number' || typeof loc.lng!=='number') return;
+  var uid=loc.uid||loc.id;
+  if(!uid) return;
+  var status=getMapStatus(loc);
+  var marker=MAP_STATE.markers[uid];
+  if(!marker){
+    marker=L.marker([loc.lat,loc.lng],{icon:buildMarkerIcon(status)});
+    marker.addTo(MAP_STATE.map);
+    marker.on('click',function(){ MAP_STATE.map.panTo(marker.getLatLng()); });
+    MAP_STATE.markers[uid]=marker;
+  }else{
+    marker.setLatLng([loc.lat,loc.lng]);
+    marker.setIcon(buildMarkerIcon(status));
+  }
+  marker.bindTooltip(buildMapTooltip(loc),{direction:'top',offset:[0,-8],className:'map-tip'});
+  marker.bindPopup(buildMapPopup(loc));
+}
+
+function clearRemovedMarkers(activeByUid){
+  Object.keys(MAP_STATE.markers).forEach(function(uid){
+    if(activeByUid[uid]) return;
+    MAP_STATE.map.removeLayer(MAP_STATE.markers[uid]);
+    delete MAP_STATE.markers[uid];
+  });
+}
+
+function renderMapSidebar(locations){
+  var listEl=document.getElementById('map-tech-list');
+  if(!listEl) return;
+  var sorted=locations.slice().sort(function(a,b){
+    return mapMs(b.timestamp)-mapMs(a.timestamp);
+  });
+  if(!sorted.length){
+    listEl.innerHTML='<div class="empty" style="padding:20px 10px;"><div class="empty-ico">📡</div>Sin ubicaciones disponibles</div>';
+    return;
+  }
+  listEl.innerHTML=sorted.map(function(loc){
+    var status=getMapStatus(loc);
+    var meta=mapStatusMeta(status);
+    var uid=loc.uid||loc.id||'';
+    return '<div class="map-tech-item" data-map-uid="'+mapEscapeHtml(uid)+'">'
+      +'<div class="name"><span class="map-status-dot" style="background:'+(status==='disponible'?'#22c55e':status==='en_camino'?'#eab308':status==='trabajando'?'#3b82f6':status==='pausado'?'#f97316':'#ef4444')+';"></span>'+mapEscapeHtml(loc.nombre||loc.email||uid||'Técnico')+'</div>'
+      +'<div class="meta">'+meta.dot+' '+meta.label+'</div>'
+      +'<div class="meta">Orden: '+mapEscapeHtml(loc.ordenActiva||'Sin orden activa')+'</div>'
+      +'<div class="meta">Sync: '+mapEscapeHtml(formatMapSync(loc.timestamp))+'</div>'
+      +'</div>';
+  }).join('');
+  Array.prototype.slice.call(listEl.querySelectorAll('[data-map-uid]')).forEach(function(el){
+    el.onclick=function(){
+      var uid=el.getAttribute('data-map-uid');
+      var marker=MAP_STATE.markers[uid];
+      if(marker && MAP_STATE.map){
+        MAP_STATE.map.setView(marker.getLatLng(),16,{animate:true});
+        marker.openPopup();
+      }
+    };
+  });
+}
+
+function renderMapKpis(locations){
+  var total=locations.length;
+  var online=locations.filter(function(loc){ return getMapStatus(loc)!=='offline'; }).length;
+  var offline=total-online;
+  var totalEl=document.getElementById('map-kpi-total');
+  var onlineEl=document.getElementById('map-kpi-online');
+  var offlineEl=document.getElementById('map-kpi-offline');
+  if(totalEl) totalEl.textContent=String(total);
+  if(onlineEl) onlineEl.textContent=String(online);
+  if(offlineEl) offlineEl.textContent=String(offline);
+}
+
+function applyMapLiveLocations(docs){
+  var activeByUid={};
+  var locs=[];
+  MAP_STATE.locations={};
+  docs.forEach(function(item){
+    var data=item&&item.data?Object.assign({},item.data):{};
+    var uid=String(data.uid||item.id||'').trim();
+    if(!uid) return;
+    data.uid=uid;
+    if(typeof data.lat==='number' && typeof data.lng==='number'){
+      upsertTechMarker(data);
+      activeByUid[uid]=true;
+    }
+    MAP_STATE.locations[uid]=data;
+    locs.push(data);
+  });
+  clearRemovedMarkers(activeByUid);
+  renderMapSidebar(locs);
+  renderMapKpis(locs);
+
+  if(!MAP_STATE.hasFitted){
+    var valid=locs.filter(function(loc){ return typeof loc.lat==='number' && typeof loc.lng==='number'; });
+    if(valid.length===1 && MAP_STATE.map){
+      MAP_STATE.map.setView([valid[0].lat,valid[0].lng],14);
+      MAP_STATE.hasFitted=true;
+    }
+    if(valid.length>1 && MAP_STATE.map){
+      var bounds=L.latLngBounds(valid.map(function(loc){ return [loc.lat,loc.lng]; }));
+      MAP_STATE.map.fitBounds(bounds,{padding:[32,32]});
+      MAP_STATE.hasFitted=true;
+    }
+  }
+  mapOverlay('');
+}
+
+function stopMapLiveFeed(){
+  if(MAP_STATE.unsubscribe){
+    try{ MAP_STATE.unsubscribe(); }catch(_err){}
+    MAP_STATE.unsubscribe=null;
+  }
+  if(typeof window.stopAdminLiveLocationsSubscription==='function'){
+    window.stopAdminLiveLocationsSubscription();
+  }
+}
+
+function startMapLiveFeed(){
+  if(MAP_STATE.unsubscribe){
+    try{ MAP_STATE.unsubscribe(); }catch(_err){}
+    MAP_STATE.unsubscribe=null;
+  }
+  if(typeof window.subscribeAdminLiveLocations!=='function'){
+    mapOverlay('Módulo Firebase live no disponible.',true);
+    return;
+  }
+  mapOverlay('Sincronizando ubicaciones live...');
+  MAP_STATE.unsubscribe=window.subscribeAdminLiveLocations(function(docs){
+    applyMapLiveLocations(Array.isArray(docs)?docs:[]);
+  },function(err){
+    console.error('Error en feed live map:',err);
+    mapOverlay('No se pudieron cargar ubicaciones en tiempo real.',true);
+  });
+}
+
+function renderMapPage(){
+  if(!ensureAdminMapInstance()) return;
+  startMapLiveFeed();
+  setTimeout(function(){ if(MAP_STATE.map) MAP_STATE.map.invalidateSize(); },120);
+}
+
+var BRANCH_GEO_STATE={
+  map:null,
+  marker:null,
+  circle:null,
+  defaults:[25.6866,-100.3161]
+};
+
+function branchGeoNum(value){
+  var n=Number(value);
+  return isFinite(n)?n:null;
+}
+
+function getBranchGeoRadiusInput(){
+  var raw=branchGeoNum((document.getElementById('b-geofence-radius')||{}).value);
+  if(!raw || raw<=0) return 120;
+  return Math.round(raw);
+}
+
+function ensureBranchGeoMap(){
+  var el=document.getElementById('b-geo-map');
+  if(!el || typeof window.L==='undefined') return null;
+  if(!BRANCH_GEO_STATE.map){
+    BRANCH_GEO_STATE.map=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,minZoom:3});
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+      attribution:'&copy; OpenStreetMap &copy; CARTO',
+      subdomains:'abcd',
+      maxZoom:20
+    }).addTo(BRANCH_GEO_STATE.map);
+    BRANCH_GEO_STATE.map.setView(BRANCH_GEO_STATE.defaults,11);
+  }
+  return BRANCH_GEO_STATE.map;
+}
+
+function updateBranchGeoPreview(centerMap){
+  var map=ensureBranchGeoMap();
+  if(!map) return;
+  var lat=branchGeoNum((document.getElementById('b-lat')||{}).value);
+  var lng=branchGeoNum((document.getElementById('b-lng')||{}).value);
+  var radius=getBranchGeoRadiusInput();
+  if(typeof lat!=='number' || typeof lng!=='number'){
+    if(BRANCH_GEO_STATE.marker){ map.removeLayer(BRANCH_GEO_STATE.marker); BRANCH_GEO_STATE.marker=null; }
+    if(BRANCH_GEO_STATE.circle){ map.removeLayer(BRANCH_GEO_STATE.circle); BRANCH_GEO_STATE.circle=null; }
+    if(centerMap){ map.setView(BRANCH_GEO_STATE.defaults,11); }
+    setTimeout(function(){ map.invalidateSize(); },80);
+    return;
+  }
+  if(!BRANCH_GEO_STATE.marker){
+    BRANCH_GEO_STATE.marker=L.marker([lat,lng]).addTo(map);
+  }else{
+    BRANCH_GEO_STATE.marker.setLatLng([lat,lng]);
+  }
+  if(!BRANCH_GEO_STATE.circle){
+    BRANCH_GEO_STATE.circle=L.circle([lat,lng],{
+      radius:radius,
+      color:'#f97316',
+      fillColor:'#f97316',
+      fillOpacity:0.18,
+      weight:1.5
+    }).addTo(map);
+  }else{
+    BRANCH_GEO_STATE.circle.setLatLng([lat,lng]);
+    BRANCH_GEO_STATE.circle.setRadius(radius);
+  }
+  if(centerMap){
+    var bounds=BRANCH_GEO_STATE.circle.getBounds();
+    map.fitBounds(bounds,{padding:[16,16]});
+  }
+  setTimeout(function(){ map.invalidateSize(); },80);
+}
+
+function bindBranchGeoInputs(){
+  ['b-lat','b-lng','b-geofence-radius'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el || el.__geoBound) return;
+    el.__geoBound=true;
+    el.addEventListener('input',function(){ updateBranchGeoPreview(false); });
+    el.addEventListener('change',function(){ updateBranchGeoPreview(false); });
+  });
+}
+
+function setBranchGeoInputs(lat,lng,radius){
+  document.getElementById('b-lat').value=(typeof lat==='number'&&isFinite(lat))?lat.toFixed(6):'';
+  document.getElementById('b-lng').value=(typeof lng==='number'&&isFinite(lng))?lng.toFixed(6):'';
+  document.getElementById('b-geofence-radius').value=(radius&&radius>0)?String(Math.round(radius)):'120';
+}
+
+function useCurrentBranchLocation(){
+  if(!navigator.geolocation){
+    toast('⚠️ Este dispositivo no soporta geolocalización');
+    return;
+  }
+  toast('📍 Obteniendo ubicación...');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var lat=Number(pos.coords.latitude.toFixed(6));
+    var lng=Number(pos.coords.longitude.toFixed(6));
+    setBranchGeoInputs(lat,lng,getBranchGeoRadiusInput());
+    updateBranchGeoPreview(true);
+    toast('✅ Ubicación de sucursal capturada');
+  },function(err){
+    var msg='No se pudo obtener ubicación';
+    if(err&&err.code===1) msg='Permiso de ubicación denegado';
+    if(err&&err.code===2) msg='Ubicación no disponible';
+    if(err&&err.code===3) msg='Tiempo de espera agotado';
+    toast('⚠️ '+msg);
+  },{
+    enableHighAccuracy:true,
+    timeout:12000,
+    maximumAge:0
+  });
+}
 
 // ══════════════ HELPERS ══════════════
 function uid(){ return '_'+Math.random().toString(36).substr(2,9); }
@@ -639,20 +1442,168 @@ function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; 
 function openM(id){ document.getElementById(id).classList.add('on'); }
 function closeM(id){ document.getElementById(id).classList.remove('on'); }
 function confirm_(msg,cb){ document.getElementById('confirm-msg').textContent=msg; document.getElementById('confirm-ok').onclick=function(){ cb(); closeM('m-confirm'); }; openM('m-confirm'); }
+function parseOrderDateToMs(v){
+  if(!v) return Date.now();
+  if(typeof v==='number') return v;
+  if(typeof v.toDate==='function') return v.toDate().getTime();
+  if(typeof v.seconds==='number') return v.seconds*1000;
+  var n=Date.parse(v);
+  if(!isNaN(n)) return n;
+  return Date.now();
+}
+
+function reportMs(item){
+  var f=item&&item.fecha;
+  if(!f) return 0;
+  if(typeof f.toDate==='function') return f.toDate().getTime();
+  if(typeof f.seconds==='number') return f.seconds*1000;
+  var n=Date.parse(f);
+  return isNaN(n)?0:n;
+}
+
+function dayStartMs(v){ if(!v) return 0; var d=new Date(v+'T00:00:00'); return isNaN(d.getTime())?0:d.getTime(); }
+function dayEndMs(v){ if(!v) return 0; var d=new Date(v+'T23:59:59'); return isNaN(d.getTime())?0:d.getTime(); }
+
+function getDashboardReports(){
+  if(Array.isArray(window.dashboardReportsCache) && window.dashboardReportsCache.length){
+    return window.dashboardReportsCache.slice();
+  }
+  return [];
+}
+
+function getDashboardMetricsSnapshot(){
+  var from=(document.getElementById('dash-from')||{}).value||'';
+  var to=(document.getElementById('dash-to')||{}).value||'';
+  var tech=(document.getElementById('dash-tech')||{}).value||'';
+  var fromMs=dayStartMs(from);
+  var toMs=dayEndMs(to);
+  var reports=getDashboardReports().filter(function(r){
+    var ms=reportMs(r);
+    if(fromMs && (!ms || ms<fromMs)) return false;
+    if(toMs && (!ms || ms>toMs)) return false;
+    if(tech && r.tecnicoId!==tech) return false;
+    return true;
+  });
+  var byOrder={};
+  reports.forEach(function(r){ if(r.ordenId) byOrder[r.ordenId]=true; });
+  var doneOrderIds=Object.keys(byOrder);
+  var doneSet={}; doneOrderIds.forEach(function(id){ doneSet[id]=true; });
+
+  var orders=DB.orders.filter(function(o){
+    if(tech && o.techId!==tech) return false;
+    var ms=parseOrderDateToMs(o.createdAt||o.updatedAt||o.date||Date.now());
+    if(fromMs && ms<fromMs) return false;
+    if(toMs && ms>toMs) return false;
+    return true;
+  });
+
+  var total=orders.length;
+  var done=orders.filter(function(o){ return doneSet[o.id] || o.status==='done'; }).length;
+  var progress=orders.filter(function(o){ return o.status==='progress'; }).length;
+  var pending=orders.filter(function(o){ return o.status==='pending'; }).length;
+
+  var techRows=DB.technicians
+    .filter(function(t){
+      if(tech && t.id!==tech) return false;
+      if(t.status && t.status!=='active' && !orders.some(function(o){ return o.techId===t.id; })) return false;
+      return true;
+    })
+    .map(function(t){
+      var tOrders=orders.filter(function(o){ return o.techId===t.id; });
+      var tDone=tOrders.filter(function(o){ return doneSet[o.id] || o.status==='done'; }).length;
+      var eff=tOrders.length?Math.round((tDone/tOrders.length)*100):0;
+      return {id:t.id,name:t.name,orders:tOrders.length,done:tDone,eff:eff,spec:t.spec||''};
+    })
+    .filter(function(r){ return r.orders>0 || !tech; })
+    .sort(function(a,b){ return b.eff-a.eff || b.done-a.done || b.orders-a.orders; });
+
+  return {
+    filters:{from:from,to:to,tech:tech},
+    orders:orders,
+    reports:reports,
+    totals:{total:total,done:done,progress:progress,pending:pending},
+    techRows:techRows
+  };
+}
+
+function renderDashboardFilterOptions(selectedTech){
+  var techSel=document.getElementById('dash-tech');
+  if(!techSel) return;
+  var current=selectedTech||techSel.value||'';
+  var opt='<option value="">— Todos los técnicos —</option>';
+  opt+=DB.technicians
+    .filter(function(t){ return !t.status || t.status==='active'; })
+    .map(function(t){ return '<option value="'+t.id+'">'+t.name+'</option>'; })
+    .join('');
+  techSel.innerHTML=opt;
+  techSel.value=current;
+}
+
+function renderTechKpiCards(rows){
+  var box=document.getElementById('dash-tech-cards');
+  if(!box) return;
+  if(!rows.length){
+    box.innerHTML='<div class="card"><div class="empty"><div class="empty-ico">👷</div>Sin datos por técnico para este filtro</div></div>';
+    return;
+  }
+  box.innerHTML=rows.map(function(r){
+    return '<div class="card dash-tech-card">'
+      +'<div class="dash-tech-head"><div class="dash-tech-name">'+r.name+'</div><span class="chip chip-a">'+r.eff+'% eficiencia</span></div>'
+      +'<div class="dash-tech-meta"><span class="chip">Órdenes: '+r.orders+'</span><span class="chip">Completadas: '+r.done+'</span></div>'
+      +'<div class="dash-bar"><div class="dash-bar-fill" style="width:'+r.eff+'%"></div></div>'
+      +'<div class="dash-tech-eff">'+(r.spec||'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function renderDashChart(rows){
+  var chart=document.getElementById('dash-tech-chart');
+  if(!chart) return;
+  if(!rows.length){
+    chart.innerHTML='<div class="empty"><div class="empty-ico">📈</div>Sin datos para gráfica</div>';
+    return;
+  }
+  var top=rows.slice(0,8);
+  chart.innerHTML=top.map(function(r){
+    return '<div class="dash-chart-row">'
+      +'<div class="dash-chart-top"><strong>'+r.name+'</strong><span>'+r.eff+'%</span></div>'
+      +'<div class="dash-bar"><div class="dash-bar-fill" style="width:'+r.eff+'%"></div></div>'
+      +'<div class="dash-chart-meta">'+r.done+' de '+r.orders+' órdenes completadas</div>'
+      +'</div>';
+  }).join('');
+}
+
+function clearDashboardFilters(){
+  var t=document.getElementById('dash-tech');
+  var f=document.getElementById('dash-from');
+  var to=document.getElementById('dash-to');
+  if(t) t.value='';
+  if(f) f.value='';
+  if(to) to.value='';
+  renderDashboard();
+}
 
 // ══════════════ MOBILE SIDEBAR ══════════════
 function openSidebar(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('sb-backdrop').classList.add('on'); document.body.style.overflow='hidden'; }
 function closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('sb-backdrop').classList.remove('on'); document.body.style.overflow=''; }
 
 // ══════════════ NAV ══════════════
-var PAGE_TITLES={dashboard:'Dashboard',orders:'Órdenes de Trabajo',tech:'Vista Técnico',report:'Reportes',clients:'Clientes',branches:'Sucursales',technicians:'Técnicos',equipment:'Equipos',checklists:'Check-lists'};
+var PAGE_TITLES={dashboard:'Dashboard',map:'Mapa de Cuadrillas',orders:'Órdenes de Trabajo',tech:'Vista Técnico',report:'Reportes',clients:'Clientes',branches:'Sucursales',technicians:'Técnicos',equipment:'Equipos',checklists:'Check-lists','tech-checklists':'Checklists técnicos'};
 
 function goTo(page,el){
+  if(typeof window.canAccessPage==='function' && !window.canAccessPage(page)){
+    toast('⛔ No tienes permisos para esta sección');
+    return;
+  }
+  if(APP_ACTIVE_PAGE==='map' && page!=='map'){
+    stopMapLiveFeed();
+  }
   closeSidebar();
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('on'); });
   document.querySelectorAll('.s-item').forEach(function(i){ i.classList.remove('on'); });
   document.getElementById('pg-'+page).classList.add('on');
   if(el) el.classList.add('on');
+  APP_ACTIVE_PAGE=page;
   document.getElementById('pg-title').textContent=PAGE_TITLES[page]||page;
   var a='';
   if(page==='orders')      a='<button class="btn btn-primary" onclick="openOrderM()">＋ Nueva Orden</button>';
@@ -662,21 +1613,36 @@ function goTo(page,el){
   if(page==='equipment')   a='<button class="btn btn-primary" onclick="openEquipM()">＋ Nuevo Equipo</button>';
   if(page==='checklists')  a='<button class="btn btn-primary" onclick="openClM()">＋ Nuevo Check-list</button>';
   document.getElementById('pg-actions').innerHTML=a;
-  var renders={dashboard:renderDashboard,orders:renderOrders,clients:renderClients,branches:renderBranches,technicians:renderTechs,equipment:renderEquipment,checklists:renderChecklists,tech:renderTechView};
+  var renders={dashboard:renderDashboard,map:renderMapPage,orders:renderOrders,clients:renderClients,branches:renderBranches,technicians:renderTechs,equipment:renderEquipment,checklists:renderChecklists,tech:renderTechView,'tech-checklists':renderTechChecklistPage};
   if(renders[page]) renders[page]();
+  if(page==='report' && typeof window.loadReportsIntoPanel==='function'){
+    window.loadReportsIntoPanel();
+  }
 }
 
 // ══════════════ DASHBOARD ══════════════
 function renderDashboard(){
-  var total=DB.orders.length, prog=DB.orders.filter(function(o){return o.status==='progress';}).length,
-      done=DB.orders.filter(function(o){return o.status==='done';}).length,
-      pend=DB.orders.filter(function(o){return o.status==='pending';}).length;
-  document.getElementById('st-total').textContent=total;
-  document.getElementById('st-prog').textContent=prog;
-  document.getElementById('st-done').textContent=done;
-  document.getElementById('st-pend').textContent=pend;
-  document.getElementById('nb-pend').textContent=pend;
-  var rows=DB.orders.slice().reverse().slice(0,5).map(function(o){return orderRow(o,false);}).join('');
+  var snap=getDashboardMetricsSnapshot();
+  renderDashboardFilterOptions(snap.filters.tech);
+  document.getElementById('st-total').textContent=snap.totals.total;
+  document.getElementById('st-prog').textContent=snap.totals.progress;
+  document.getElementById('st-done').textContent=snap.totals.done;
+  document.getElementById('st-pend').textContent=snap.totals.pending;
+  document.getElementById('nb-pend').textContent=snap.totals.pending;
+
+  renderTechKpiCards(snap.techRows);
+  renderDashChart(snap.techRows);
+
+  var rows=snap.orders
+    .slice()
+    .sort(function(a,b){
+      var am=parseOrderDateToMs(a.createdAt||a.updatedAt||a.date||Date.now());
+      var bm=parseOrderDateToMs(b.createdAt||b.updatedAt||b.date||Date.now());
+      return bm-am;
+    })
+    .slice(0,5)
+    .map(function(o){return orderRow(o,false);})
+    .join('');
   document.getElementById('tb-dash').innerHTML=rows||'<tr><td colspan="6"><div class="empty">Sin órdenes</div></td></tr>';
 }
 
@@ -716,8 +1682,16 @@ function fillBranchSel(){ var cid=document.getElementById('o-client').value; doc
 function saveOrder(){
   var eid=document.getElementById('o-eid').value;
   var data={type:document.getElementById('o-type').value,clientId:document.getElementById('o-client').value,branchId:document.getElementById('o-branch').value,techId:document.getElementById('o-tech').value,clId:document.getElementById('o-cl').value,priority:document.getElementById('o-prio').value,desc:document.getElementById('o-desc').value};
-  if(eid){ for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===eid){Object.assign(DB.orders[i],data);break;} toast('✅ Orden actualizada'); }
-  else{ var num='OT-'+String(DB.nextNum++).padStart(3,'0'); DB.orders.unshift(Object.assign({id:num,status:'pending',date:'Hoy'},data)); toast('✅ Orden '+num+' creada'); }
+  if(eid){
+    for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===eid){ Object.assign(DB.orders[i],data,{updatedAt:new Date().toISOString()}); break; }
+    toast('✅ Orden actualizada');
+  }
+  else{
+    var nowIso=new Date().toISOString();
+    var num='OT-'+String(DB.nextNum++).padStart(3,'0');
+    DB.orders.unshift(Object.assign({id:num,status:'pending',date:'Hoy',createdAt:nowIso,updatedAt:nowIso},data));
+    toast('✅ Orden '+num+' creada');
+  }
   closeM('m-order'); renderOrders(); renderDashboard();
 }
 function delOrder(id){ confirm_('¿Eliminar la orden '+id+'?',function(){ DB.orders=DB.orders.filter(function(o){return o.id!==id;}); renderOrders(); renderDashboard(); toast('🗑️ Orden eliminada'); }); }
@@ -737,18 +1711,96 @@ function delClient(id){ var c=gClient(id); confirm_('¿Eliminar "'+( c?c.name:''
 
 // ══════════════ BRANCHES ══════════════
 function renderBranches(){
-  var fSel=document.getElementById('br-filter'),sel=fSel.value;
+  var fSel=document.getElementById('br-filter');
+  if(!fSel) return;
+  var sel=fSel.value;
   fSel.innerHTML='<option value="">— Todos los clientes —</option>'+DB.clients.map(function(c){return'<option value="'+c.id+'"'+(c.id===sel?' selected':'')+'>'+c.name+'</option>';}).join('');
   var list=sel?DB.branches.filter(function(b){return b.clientId===sel;}):DB.branches;
-  var html=list.map(function(b){ var cl=gClient(b.clientId),eqs=DB.equipment.filter(function(e){return e.branchId===b.id;});
-    return'<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(59,130,246,.1);">📍</div><div><div class="card-title">'+b.name+'</div><div class="card-sub">'+(cl?cl.name:'—')+'</div></div></div><div class="card-acts"><button class="btn btn-ghost btn-sm btn-icon" onclick="openBranchM(\''+b.id+'\')">✏️</button><button class="btn btn-danger btn-sm btn-icon" onclick="delBranch(\''+b.id+'\')">🗑️</button></div></div><div style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px;"><span>📍 '+b.address+'</span><span>👤 '+b.contact+' · '+b.phone+'</span></div><div class="card-meta"><span class="badge '+(b.status==='active'?'b-act':'b-ina')+'">'+(b.status==='active'?'Activa':'Inactiva')+'</span><span class="chip">'+eqs.length+' equipo'+(eqs.length!==1?'s':'')+'</span></div></div>';
+  var html=list.map(function(raw){
+    var b=normalizeBranchDoc(raw);
+    var cl=gClient(b.clientId),eqs=DB.equipment.filter(function(e){return e.branchId===b.id;});
+    var hasGps=(typeof b.lat==='number' && typeof b.lng==='number');
+    var gpsLabel=hasGps?(b.lat.toFixed(5)+', '+b.lng.toFixed(5)):'Sin GPS';
+    return '<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(59,130,246,.1);">📍</div><div><div class="card-title">'+b.name+'</div><div class="card-sub">'+(cl?cl.name:'—')+'</div></div></div><div class="card-acts"><button class="btn btn-ghost btn-sm btn-icon" onclick="openBranchM(\''+b.id+'\')">✏️</button><button class="btn btn-danger btn-sm btn-icon" onclick="delBranch(\''+b.id+'\')">🗑️</button></div></div><div style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px;"><span>📍 '+b.address+'</span><span>👤 '+b.contact+' · '+b.phone+'</span><span>🛰️ '+gpsLabel+'</span></div><div class="card-meta"><span class="badge '+(b.status==='active'?'b-act':'b-ina')+'">'+(b.status==='active'?'Activa':'Inactiva')+'</span><span class="chip">Geofence '+b.geofenceRadius+'m</span><span class="chip">'+eqs.length+' equipo'+(eqs.length!==1?'s':'')+'</span></div></div>';
   }).join('');
   html+='<div class="card card-dashed" onclick="openBranchM()"><div style="font-size:28px;color:var(--muted);">＋</div><div style="font-size:13px;color:var(--muted);">Agregar sucursal</div></div>';
   document.getElementById('grid-branches').innerHTML=html;
 }
-function openBranchM(id){ id=id||null; document.getElementById('b-eid').value=id||''; document.getElementById('m-branch-ttl').textContent=id?'Editar Sucursal':'Nueva Sucursal'; document.getElementById('b-client').innerHTML=DB.clients.map(function(c){return'<option value="'+c.id+'">'+c.name+'</option>';}).join(''); if(id){var b=gBranch(id);if(b){document.getElementById('b-client').value=b.clientId;document.getElementById('b-name').value=b.name;document.getElementById('b-addr').value=b.address;document.getElementById('b-contact').value=b.contact;document.getElementById('b-phone').value=b.phone;document.getElementById('b-status').value=b.status;}}else{['b-name','b-addr','b-contact','b-phone'].forEach(function(f){document.getElementById(f).value='';});document.getElementById('b-status').value='active';} openM('m-branch'); }
-function saveBranch(){ var eid=document.getElementById('b-eid').value; var data={clientId:document.getElementById('b-client').value,name:document.getElementById('b-name').value.trim(),address:document.getElementById('b-addr').value.trim(),contact:document.getElementById('b-contact').value.trim(),phone:document.getElementById('b-phone').value.trim(),status:document.getElementById('b-status').value}; if(!data.name){toast('⚠️ El nombre es requerido');return;} if(eid){for(var i=0;i<DB.branches.length;i++)if(DB.branches[i].id===eid){Object.assign(DB.branches[i],data);break;}toast('✅ Sucursal actualizada');}else{DB.branches.push(Object.assign({id:uid()},data));toast('✅ Sucursal agregada');} closeM('m-branch'); renderBranches(); }
-function delBranch(id){ var b=gBranch(id); confirm_('¿Eliminar "'+( b?b.name:'')+'"?',function(){ DB.equipment=DB.equipment.filter(function(e){return e.branchId!==id;}); DB.branches=DB.branches.filter(function(b){return b.id!==id;}); renderBranches(); toast('🗑️ Sucursal eliminada'); }); }
+
+function openBranchM(id){
+  id=id||null;
+  document.getElementById('b-eid').value=id||'';
+  document.getElementById('m-branch-ttl').textContent=id?'Editar Sucursal':'Nueva Sucursal';
+  document.getElementById('b-client').innerHTML=DB.clients.map(function(c){return'<option value="'+c.id+'">'+c.name+'</option>';}).join('');
+  if(id){
+    var b=gBranch(id);
+    if(b){
+      b=normalizeBranchDoc(b);
+      document.getElementById('b-client').value=b.clientId;
+      document.getElementById('b-name').value=b.name;
+      document.getElementById('b-addr').value=b.address;
+      document.getElementById('b-contact').value=b.contact;
+      document.getElementById('b-phone').value=b.phone;
+      document.getElementById('b-status').value=b.status;
+      setBranchGeoInputs(b.lat,b.lng,b.geofenceRadius||120);
+    }
+  }else{
+    ['b-name','b-addr','b-contact','b-phone','b-lat','b-lng'].forEach(function(f){document.getElementById(f).value='';});
+    document.getElementById('b-status').value='active';
+    document.getElementById('b-geofence-radius').value='120';
+  }
+  openM('m-branch');
+  bindBranchGeoInputs();
+  setTimeout(function(){ updateBranchGeoPreview(true); },120);
+}
+
+async function saveBranch(){
+  var eid=document.getElementById('b-eid').value;
+  var data={
+    id:eid||'',
+    clientId:document.getElementById('b-client').value,
+    name:document.getElementById('b-name').value.trim(),
+    address:document.getElementById('b-addr').value.trim(),
+    contact:document.getElementById('b-contact').value.trim(),
+    phone:document.getElementById('b-phone').value.trim(),
+    status:document.getElementById('b-status').value,
+    lat:branchGeoNum(document.getElementById('b-lat').value),
+    lng:branchGeoNum(document.getElementById('b-lng').value),
+    geofenceRadius:getBranchGeoRadiusInput()
+  };
+  if(!data.name){toast('⚠️ El nombre es requerido');return;}
+  if(typeof window.saveBranchToFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore para sucursales');
+    return;
+  }
+  try{
+    await window.saveBranchToFirestore(data);
+    closeM('m-branch');
+    toast(eid?'✅ Sucursal actualizada':'✅ Sucursal agregada');
+  }catch(err){
+    console.error('Error guardando sucursal:',err);
+    toast('❌ No se pudo guardar la sucursal');
+  }
+}
+
+function delBranch(id){
+  var b=gBranch(id);
+  confirm_('¿Eliminar "'+( b?b.name:'')+'"?',async function(){
+    if(typeof window.deleteBranchFromFirestore!=='function'){
+      toast('⚠️ Sin conexión con Firestore para eliminar');
+      return;
+    }
+    try{
+      await window.deleteBranchFromFirestore(id);
+      DB.equipment=DB.equipment.filter(function(e){return e.branchId!==id;});
+      renderEquipment();
+      toast('🗑️ Sucursal eliminada');
+    }catch(err){
+      console.error('Error eliminando sucursal:',err);
+      toast('❌ No se pudo eliminar la sucursal');
+    }
+  });
+}
 
 // ══════════════ TECHNICIANS ══════════════
 function renderTechs(){
@@ -778,14 +1830,15 @@ function delEquip(id){ confirm_('¿Eliminar este equipo?',function(){ DB.equipme
 
 // ══════════════ CHECKLIST BUILDER ══════════════
 function renderChecklists(){
-  var html=DB.checklists.map(function(cl){
+  var html=DB.checklists.map(function(rawCl){
+    var cl=normalizeChecklistDoc(rawCl);
     var totalItems=0;
     cl.sections.forEach(function(s){ if(s.type==='checklist') totalItems+=s.items.length; });
     var secLabels=cl.sections.map(function(s){
-      var icons={checklist:'☑️',fields:'📝',textarea:'💬'};
+      var icons={checklist:'☑️',fields:'📝',textarea:'💬',multiple_choice:'🔘',signature:'✍️'};
       return'<span class="chip">'+(icons[s.type]||'')+'  '+s.title+'</span>';
     }).join('');
-    return'<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(167,139,250,.1);">✅</div><div><div class="card-title">'+cl.name+'</div><div class="card-sub">'+cl.type+'</div></div></div><div class="card-acts"><button class="btn btn-ghost btn-sm btn-icon" onclick="openClM(\''+cl.id+'\')">✏️</button><button class="btn btn-danger btn-sm btn-icon" onclick="delCl(\''+cl.id+'\')">🗑️</button></div></div><div style="font-size:12px;color:var(--muted);margin-bottom:8px;">'+cl.sections.length+' secciones · '+totalItems+' tareas</div><div style="display:flex;flex-wrap:wrap;gap:5px;">'+secLabels+'</div></div>';
+    return'<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(167,139,250,.1);">✅</div><div><div class="card-title">'+cl.name+'</div><div class="card-sub">'+cl.type+' · '+formatChecklistDate(cl.updatedAt||cl.createdAt)+'</div></div></div><div class="card-acts"><button class="btn btn-ghost btn-sm btn-icon" onclick="openClM(\''+cl.id+'\')">✏️</button><button class="btn btn-danger btn-sm btn-icon" onclick="delCl(\''+cl.id+'\')">🗑️</button></div></div><div style="font-size:12px;color:var(--muted);margin-bottom:8px;">'+cl.sections.length+' secciones · '+totalItems+' tareas</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">'+secLabels+'</div><div class="card-meta"><span class="badge '+(cl.published?'b-act':'b-ina')+'">'+(cl.published?'Publicado':'No publicado')+'</span><button class="btn btn-ghost btn-sm" onclick="toggleChecklistPublished(\''+cl.id+'\')">'+(cl.published?'Despublicar':'Publicar')+'</button></div></div>';
   }).join('');
   html+='<div class="card card-dashed" onclick="openClM()"><div style="font-size:28px;color:var(--muted);">＋</div><div style="font-size:13px;color:var(--muted);">Nuevo check-list</div></div>';
   document.getElementById('grid-checklists').innerHTML=html;
@@ -800,10 +1853,12 @@ function openClM(id){
     if(cl){
       document.getElementById('cl-name').value=cl.name;
       document.getElementById('cl-type').value=cl.type;
+      document.getElementById('cl-published').value=cl.published?'true':'false';
       tmpSections=JSON.parse(JSON.stringify(cl.sections));
     }
   } else {
     document.getElementById('cl-name').value='';
+    document.getElementById('cl-published').value='false';
     tmpSections=[];
   }
   renderBuilder();
@@ -813,7 +1868,13 @@ function openClM(id){
 function renderBuilder(){
   var container=document.getElementById('cl-builder');
   container.innerHTML=tmpSections.map(function(sec,si){
-    var icons={checklist:'☑️ Tareas',fields:'📝 Campos',textarea:'💬 Texto libre'};
+    var icons={
+      checklist:'☑️ Tareas',
+      fields:'📝 Campos',
+      textarea:'💬 Texto libre',
+      multiple_choice:'🔘 Opción múltiple',
+      signature:'✍️ Firma'
+    };
     var bodyHtml='';
 
     if(sec.type==='checklist'){
@@ -854,10 +1915,43 @@ function renderBuilder(){
         +'<input class="fi" value="'+sec.placeholder+'" oninput="tmpSections['+si+'].placeholder=this.value" placeholder="Ej: Escribe tus observaciones..."></div>';
     }
 
+    if(sec.type==='multiple_choice'){
+      if(!Array.isArray(sec.options)) sec.options=[];
+      var optionRows=sec.options.map(function(opt,oi){
+        return '<div class="mc-opt-row">'
+          +'<input class="fi" value="'+opt+'" oninput="tmpSections['+si+'].options['+oi+']=this.value" placeholder="Texto de opción">'
+          +'<div class="mc-opt-actions">'
+          +'<button class="cl-move-btn" onclick="moveMcOption('+si+','+oi+',-1)" '+(oi===0?'disabled':'')+'>↑</button>'
+          +'<button class="cl-move-btn" onclick="moveMcOption('+si+','+oi+',1)" '+(oi===sec.options.length-1?'disabled':'')+'>↓</button>'
+          +'<button class="cl-del-btn" onclick="removeMcOption('+si+','+oi+')">✕</button>'
+          +'</div>'
+          +'</div>';
+      }).join('');
+      bodyHtml='<div class="fg"><label class="fl" style="font-size:10px;">Pregunta</label>'
+        +'<input class="fi" value="'+(sec.label||'')+'" oninput="tmpSections['+si+'].label=this.value" placeholder="Ej: Estado de la freidora"></div>'
+        +'<label class="req-toggle"><input type="checkbox" '+(sec.required===true?'checked':'')+' onchange="toggleSectionRequired('+si+',this.checked)">Obligatorio</label>'
+        +'<div class="mc-opt-list">'+optionRows+'</div>'
+        +'<div class="cl-add-item-row">'
+        +'<input class="fi" id="new-mc-option-'+si+'" placeholder="Agregar opción..." onkeydown="if(event.key===\'Enter\'){event.preventDefault();addMcOption('+si+');}">'
+        +'<button class="btn btn-primary" onclick="addMcOption('+si+')">＋ Opción</button>'
+        +'</div>';
+    }
+
+    if(sec.type==='signature'){
+      bodyHtml='<div class="fg"><label class="fl" style="font-size:10px;">Etiqueta de firma</label>'
+        +'<input class="fi" value="'+(sec.label||'')+'" oninput="tmpSections['+si+'].label=this.value" placeholder="Ej: Firma del supervisor"></div>'
+        +'<label class="req-toggle"><input type="checkbox" '+(sec.required===true?'checked':'')+' onchange="toggleSectionRequired('+si+',this.checked)">Obligatorio</label>'
+        +'<div style="font-size:11px;color:var(--muted);">Se mostrará un canvas de firma dinámico en la vista técnico.</div>';
+    }
+
     return'<div class="cl-section-block">'
       +'<div class="cl-section-head">'
       +'<span class="sec-type-badge">'+(icons[sec.type]||sec.type)+'</span>'
       +'<input class="cl-section-title-input" value="'+sec.title+'" placeholder="Nombre de la sección..." oninput="tmpSections['+si+'].title=this.value">'
+      +'<div class="cl-move-wrap">'
+      +'<button class="cl-move-btn" title="Mover arriba" onclick="moveSection('+si+',-1)" '+(si===0?'disabled':'')+'>↑</button>'
+      +'<button class="cl-move-btn" title="Mover abajo" onclick="moveSection('+si+',1)" '+(si===tmpSections.length-1?'disabled':'')+'>↓</button>'
+      +'</div>'
       +'<button class="cl-del-btn" style="font-size:16px;" onclick="removeSection('+si+')">🗑️</button>'
       +'</div>'
       +'<div class="cl-section-body">'+bodyHtml+'</div>'
@@ -869,7 +1963,9 @@ function addSection(type){
   var defaults={
     checklist:{type:'checklist',title:'Nueva sección de tareas',items:[]},
     fields:{type:'fields',title:'Nueva sección de campos',fields:[]},
-    textarea:{type:'textarea',title:'Observaciones',placeholder:'Escribe tus observaciones aquí...'}
+    textarea:{type:'textarea',title:'Observaciones',placeholder:'Escribe tus observaciones aquí...'},
+    multiple_choice:{type:'multiple_choice',title:'Opción múltiple',label:'Nueva pregunta',options:['Opción 1','Opción 2'],required:false},
+    signature:{type:'signature',title:'Firma',label:'Firma del técnico',required:true}
   };
   tmpSections.push(Object.assign({id:uid()},JSON.parse(JSON.stringify(defaults[type]))));
   renderBuilder();
@@ -879,6 +1975,14 @@ function addSection(type){
 }
 
 function removeSection(si){ tmpSections.splice(si,1); renderBuilder(); }
+function moveSection(si,dir){
+  var ni=si+dir;
+  if(ni<0 || ni>=tmpSections.length) return;
+  var cur=tmpSections[si];
+  tmpSections[si]=tmpSections[ni];
+  tmpSections[ni]=cur;
+  renderBuilder();
+}
 
 function addSecItem(si){
   var txt=document.getElementById('new-item-'+si).value.trim();
@@ -899,25 +2003,743 @@ function addField(si){
   renderBuilder();
 }
 function removeField(si,fi){ tmpSections[si].fields.splice(fi,1); renderBuilder(); }
+function toggleSectionRequired(si,checked){ tmpSections[si].required=!!checked; }
+function addMcOption(si){
+  var input=document.getElementById('new-mc-option-'+si);
+  var txt=input?input.value.trim():'';
+  if(!txt){toast('⚠️ Escribe una opción');return;}
+  if(!Array.isArray(tmpSections[si].options)) tmpSections[si].options=[];
+  tmpSections[si].options.push(txt);
+  if(input) input.value='';
+  renderBuilder();
+}
+function removeMcOption(si,oi){
+  if(!Array.isArray(tmpSections[si].options)) return;
+  tmpSections[si].options.splice(oi,1);
+  renderBuilder();
+}
+function moveMcOption(si,oi,dir){
+  if(!Array.isArray(tmpSections[si].options)) return;
+  var ni=oi+dir;
+  if(ni<0 || ni>=tmpSections[si].options.length) return;
+  var cur=tmpSections[si].options[oi];
+  tmpSections[si].options[oi]=tmpSections[si].options[ni];
+  tmpSections[si].options[ni]=cur;
+  renderBuilder();
+}
 
-function saveCl(){
+async function saveCl(){
   var eid=document.getElementById('cl-eid').value;
-  var data={name:document.getElementById('cl-name').value.trim(),type:document.getElementById('cl-type').value,sections:JSON.parse(JSON.stringify(tmpSections))};
+  var rawSections=JSON.parse(JSON.stringify(tmpSections));
+  var normalizedSections=rawSections.map(function(sec){
+    var out=Object.assign({},sec||{});
+    out.id=String(out.id||uid());
+    out.title=String(out.title||'Sección').trim();
+    if(out.type==='multiple_choice'){
+      out.label=String(out.label||out.title||'Pregunta').trim();
+      out.options=(Array.isArray(out.options)?out.options:[]).map(function(opt){ return String(opt||'').trim(); }).filter(Boolean);
+      out.required=out.required===true;
+    }
+    if(out.type==='signature'){
+      out.label=String(out.label||out.title||'Firma').trim();
+      out.required=out.required===true;
+    }
+    return out;
+  });
+  var data={
+    id:eid||'',
+    name:document.getElementById('cl-name').value.trim(),
+    type:document.getElementById('cl-type').value,
+    published:document.getElementById('cl-published').value==='true',
+    sections:normalizedSections
+  };
   if(!data.name){toast('⚠️ El nombre es requerido');return;}
   if(!data.sections.length){toast('⚠️ Agrega al menos una sección');return;}
-  if(eid){for(var i=0;i<DB.checklists.length;i++)if(DB.checklists[i].id===eid){Object.assign(DB.checklists[i],data);break;}toast('✅ Check-list actualizado');}
-  else{DB.checklists.push(Object.assign({id:uid()},data));toast('✅ Check-list creado');}
-  closeM('m-cl'); renderChecklists();
+  var invalidMc=data.sections.find(function(sec){
+    return sec.type==='multiple_choice' && (!sec.label || !Array.isArray(sec.options) || !sec.options.length);
+  });
+  if(invalidMc){
+    toast('⚠️ Cada sección de opción múltiple debe tener pregunta y al menos una opción');
+    return;
+  }
+  var invalidSig=data.sections.find(function(sec){
+    return sec.type==='signature' && !sec.label;
+  });
+  if(invalidSig){
+    toast('⚠️ Cada sección de firma debe tener una etiqueta');
+    return;
+  }
+  if(typeof window.saveChecklistToFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore para checklists');
+    return;
+  }
+  try{
+    await window.saveChecklistToFirestore(data);
+    closeM('m-cl');
+    toast(eid?'✅ Check-list actualizado':'✅ Check-list creado');
+  }catch(err){
+    console.error('Error guardando checklist en Firestore:',err);
+    toast('❌ No se pudo guardar el check-list');
+  }
 }
-function delCl(id){ confirm_('¿Eliminar este check-list?',function(){ DB.checklists=DB.checklists.filter(function(c){return c.id!==id;}); renderChecklists(); toast('🗑️ Check-list eliminado'); }); }
+function delCl(id){ confirm_('¿Eliminar este check-list?',async function(){
+  if(typeof window.deleteChecklistFromFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore para eliminar');
+    return;
+  }
+  try{
+    await window.deleteChecklistFromFirestore(id);
+    toast('🗑️ Check-list eliminado');
+  }catch(err){
+    console.error('Error eliminando checklist:',err);
+    toast('❌ No se pudo eliminar el check-list');
+  }
+}); }
+
+async function toggleChecklistPublished(id){
+  var cl=gCl(id);
+  if(!cl){ toast('⚠️ Checklist no encontrado'); return; }
+  if(typeof window.setChecklistPublishedInFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore');
+    return;
+  }
+  try{
+    await window.setChecklistPublishedInFirestore(id,!cl.published);
+    toast(!cl.published?'✅ Checklist publicado':'✅ Checklist despublicado');
+  }catch(err){
+    console.error('Error cambiando publicación:',err);
+    toast('❌ No se pudo actualizar estado de publicación');
+  }
+}
 
 // ══════════════ TECH VIEW ══════════════
+function setWorkModeButtonLabel(){
+  var btn=document.querySelector('#wd-wrap .btn.btn-success');
+  if(!btn) return;
+  btn.textContent=currentWorkMode==='free'?'✓ Guardar Checklist y Generar Reporte':'✓ Cerrar Orden y Generar Reporte';
+}
+
+function refreshVisibleSignaturePads(){
+  if(signatureModalPad && typeof signatureModalPad.resize==='function'){
+    signatureModalPad.resize();
+  }
+}
+
+function normalizeSectionDomKey(raw){
+  return String(raw||'').replace(/[^a-zA-Z0-9_-]/g,'_');
+}
+
+function createSignaturePad(canvas,options){
+  if(!canvas) return null;
+  var opts=options||{};
+  var ctx=canvas.getContext('2d');
+  if(!ctx) return null;
+  var drawing=false;
+  var hasStroke=false;
+  var activePointerId=null;
+  var lastPoint=null;
+  var lastMidPoint=null;
+  var lastTimestamp=0;
+  var velocity=0;
+  var baseLineWidth=Number(opts.lineWidth)||2.8;
+  var minLineWidth=Math.max(0.8,Number(opts.minLineWidth)||1.1);
+  var maxLineWidth=Math.max(minLineWidth+0.2,Number(opts.maxLineWidth)||4.6);
+  var velocityFactor=Math.max(0.2,Number(opts.velocityFactor)||2.35);
+  var velocityFilterWeight=Math.min(0.97,Math.max(0.45,Number(opts.velocityFilterWeight)||0.75));
+  var currentLineWidth=Math.min(maxLineWidth,Math.max(minLineWidth,baseLineWidth));
+
+  function clamp(value,min,max){
+    return Math.min(max,Math.max(min,value));
+  }
+
+  function applyBrushStyle(lineWidth){
+    var nextWidth=typeof lineWidth==='number' ? lineWidth : currentLineWidth;
+    currentLineWidth=clamp(nextWidth,minLineWidth,maxLineWidth);
+    ctx.strokeStyle=opts.strokeStyle||'#111827';
+    ctx.lineWidth=currentLineWidth;
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+    ctx.imageSmoothingEnabled=true;
+  }
+
+  function clearCanvasOnly(){
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.restore();
+  }
+
+  function resizeCanvas(preserveDrawing){
+    var rect=canvas.getBoundingClientRect();
+    var cssWidth=Math.max(1,Math.round(rect.width||canvas.clientWidth||600));
+    var cssHeight=Math.max(1,Math.round(rect.height||canvas.clientHeight||200));
+    var dpr=Math.max(window.devicePixelRatio||1,1);
+    if(canvas.__sigW===cssWidth && canvas.__sigH===cssHeight && canvas.__sigDpr===dpr){
+      applyBrushStyle();
+      return;
+    }
+    var snapshot=(preserveDrawing && hasStroke)?canvas.toDataURL('image/png'):'';
+    canvas.width=Math.round(cssWidth*dpr);
+    canvas.height=Math.round(cssHeight*dpr);
+    canvas.__sigW=cssWidth;
+    canvas.__sigH=cssHeight;
+    canvas.__sigDpr=dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    applyBrushStyle();
+    if(snapshot){
+      var restoreImg=new Image();
+      restoreImg.onload=function(){
+        clearCanvasOnly();
+        ctx.drawImage(restoreImg,0,0,cssWidth,cssHeight);
+      };
+      restoreImg.src=snapshot;
+    }
+  }
+
+  function pointFromEvent(ev){
+    var rect=canvas.getBoundingClientRect();
+    return {x:ev.clientX-rect.left,y:ev.clientY-rect.top};
+  }
+
+  function pointFromTouch(ev){
+    var touch=(ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]);
+    if(!touch) return null;
+    var rect=canvas.getBoundingClientRect();
+    return {x:touch.clientX-rect.left,y:touch.clientY-rect.top};
+  }
+
+  function startStroke(point,ev){
+    if(!point) return;
+    if(ev && typeof ev.preventDefault==='function') ev.preventDefault();
+    resizeCanvas(true);
+    drawing=true;
+    velocity=0;
+    currentLineWidth=maxLineWidth;
+    applyBrushStyle(currentLineWidth);
+    lastPoint=point;
+    lastMidPoint=point;
+    lastTimestamp=Number(ev && ev.timeStamp)||Date.now();
+    if(typeof opts.onStart==='function') opts.onStart();
+  }
+
+  function drawStroke(point,timestamp){
+    if(!drawing || !point) return;
+    var now=Number(timestamp)||Date.now();
+    var dx=point.x-lastPoint.x;
+    var dy=point.y-lastPoint.y;
+    var distance=Math.sqrt((dx*dx)+(dy*dy));
+    var deltaT=Math.max(now-lastTimestamp,1);
+    var instantVelocity=distance/deltaT;
+    velocity=(velocityFilterWeight*velocity)+((1-velocityFilterWeight)*instantVelocity);
+    var targetLineWidth=maxLineWidth-(Math.min(1,velocity*velocityFactor)*(maxLineWidth-minLineWidth));
+    currentLineWidth=(currentLineWidth*0.7)+(targetLineWidth*0.3);
+    applyBrushStyle(currentLineWidth);
+    var midPoint={x:(lastPoint.x+point.x)/2,y:(lastPoint.y+point.y)/2};
+    ctx.beginPath();
+    ctx.moveTo(lastMidPoint.x,lastMidPoint.y);
+    ctx.quadraticCurveTo(lastPoint.x,lastPoint.y,midPoint.x,midPoint.y);
+    ctx.stroke();
+    lastPoint=point;
+    lastMidPoint=midPoint;
+    if(!hasStroke){
+      hasStroke=true;
+      if(typeof opts.onStroke==='function') opts.onStroke();
+    }
+    lastTimestamp=now;
+  }
+
+  function endStroke(ev){
+    if(!drawing) return;
+    if(ev && typeof ev.pointerId==='number' && activePointerId!==null && ev.pointerId!==activePointerId) return;
+    drawing=false;
+    lastPoint=null;
+    lastMidPoint=null;
+    if(activePointerId!==null && canvas.releasePointerCapture){
+      try{ canvas.releasePointerCapture(activePointerId); }catch(_err){}
+    }
+    activePointerId=null;
+    if(typeof opts.onCommit==='function'){
+      opts.onCommit(hasStroke?canvas.toDataURL('image/png'):'',hasStroke);
+    }
+  }
+
+  if(window.PointerEvent){
+    canvas.addEventListener('pointerdown',function(ev){
+      if(ev.button!==undefined && ev.button!==0) return;
+      activePointerId=ev.pointerId;
+      if(canvas.setPointerCapture){
+        try{ canvas.setPointerCapture(ev.pointerId); }catch(_err){}
+      }
+      startStroke(pointFromEvent(ev),ev);
+    });
+    canvas.addEventListener('pointermove',function(ev){
+      if(!drawing) return;
+      if(activePointerId!==null && ev.pointerId!==activePointerId) return;
+      if(typeof ev.preventDefault==='function') ev.preventDefault();
+      drawStroke(pointFromEvent(ev),ev.timeStamp);
+    });
+    canvas.addEventListener('pointerup',endStroke);
+    canvas.addEventListener('pointercancel',endStroke);
+    canvas.addEventListener('pointerleave',endStroke);
+  }else{
+    canvas.addEventListener('mousedown',function(ev){
+      if(ev.button!==0) return;
+      startStroke(pointFromEvent(ev),ev);
+    });
+    canvas.addEventListener('mousemove',function(ev){
+      if(!drawing) return;
+      if(typeof ev.preventDefault==='function') ev.preventDefault();
+      drawStroke(pointFromEvent(ev),ev.timeStamp);
+    });
+    canvas.addEventListener('mouseup',endStroke);
+    canvas.addEventListener('mouseleave',endStroke);
+    canvas.addEventListener('touchstart',function(ev){
+      startStroke(pointFromTouch(ev),ev);
+    },{passive:false});
+    canvas.addEventListener('touchmove',function(ev){
+      if(!drawing) return;
+      if(typeof ev.preventDefault==='function') ev.preventDefault();
+      drawStroke(pointFromTouch(ev),ev.timeStamp);
+    },{passive:false});
+    canvas.addEventListener('touchend',endStroke);
+    canvas.addEventListener('touchcancel',endStroke);
+  }
+
+  resizeCanvas(false);
+  if(typeof opts.onCommit==='function'){
+    opts.onCommit('',false);
+  }
+
+  return {
+    clear:function(){
+      clearCanvasOnly();
+      applyBrushStyle();
+      drawing=false;
+      hasStroke=false;
+      lastPoint=null;
+      lastMidPoint=null;
+      activePointerId=null;
+      lastTimestamp=0;
+      velocity=0;
+      if(typeof opts.onCommit==='function'){
+        opts.onCommit('',false);
+      }
+    },
+    resize:function(){
+      resizeCanvas(hasStroke);
+    },
+    isSigned:function(){
+      return hasStroke;
+    },
+    getDataUrl:function(){
+      return hasStroke?canvas.toDataURL('image/png'):'';
+    },
+    setDataUrl:function(dataUrl){
+      var value=String(dataUrl||'').trim();
+      resizeCanvas(false);
+      clearCanvasOnly();
+      drawing=false;
+      hasStroke=false;
+      activePointerId=null;
+      lastPoint=null;
+      lastMidPoint=null;
+      lastTimestamp=0;
+      velocity=0;
+      if(!value){
+        applyBrushStyle();
+        if(typeof opts.onCommit==='function'){
+          opts.onCommit('',false);
+        }
+        return;
+      }
+      var img=new Image();
+      img.onload=function(){
+        var drawW=canvas.__sigW||canvas.clientWidth||1;
+        var drawH=canvas.__sigH||canvas.clientHeight||1;
+        clearCanvasOnly();
+        ctx.drawImage(img,0,0,drawW,drawH);
+        hasStroke=true;
+        applyBrushStyle(maxLineWidth);
+        if(typeof opts.onStroke==='function') opts.onStroke();
+        if(typeof opts.onCommit==='function'){
+          opts.onCommit(canvas.toDataURL('image/png'),true);
+        }
+      };
+      img.onerror=function(){
+        applyBrushStyle();
+        if(typeof opts.onCommit==='function'){
+          opts.onCommit('',false);
+        }
+      };
+      img.src=value;
+    }
+  };
+}
+
+function updateFixedSignatureUi(){
+  var wrap=document.getElementById('sig-fixed-preview-wrap');
+  var img=document.getElementById('sig-fixed-preview');
+  var statusEl=document.getElementById('sig-st');
+  var signed=!!String(fixedSignatureData||'').trim();
+  if(img){
+    img.src=signed?fixedSignatureData:'';
+  }
+  if(wrap){
+    wrap.classList.toggle('has-signature',signed);
+  }
+  sigSigned=signed;
+  if(statusEl){
+    statusEl.textContent=signed?'✓ Firmado':'Sin firmar';
+  }
+}
+
+function updateDynamicSignatureUi(sigKey){
+  var key=normalizeSectionDomKey(sigKey);
+  var state=dynamicSignatureState[key]||{signed:false,value:''};
+  var signed=!!String(state.value||'').trim();
+  var wrap=document.getElementById('sigdyn-prev-'+key);
+  var img=document.getElementById('sigdyn-img-'+key);
+  var statusEl=document.getElementById('sigdyn-st-'+key);
+  if(img){
+    img.src=signed?state.value:'';
+  }
+  if(wrap){
+    wrap.classList.toggle('has-signature',signed);
+  }
+  if(statusEl){
+    statusEl.textContent=signed?'✓ Firmado':'Sin firmar';
+  }
+}
+
+function setDynamicSignatureValue(sigKey,value){
+  var key=normalizeSectionDomKey(sigKey);
+  var data=String(value||'').trim();
+  dynamicSignatureState[key]={signed:!!data,value:data};
+  updateDynamicSignatureUi(key);
+}
+
+function getSignatureValueFromContext(ctx){
+  if(!ctx || !ctx.type) return '';
+  if(ctx.type==='fixed'){
+    return String(fixedSignatureData||'').trim();
+  }
+  var state=dynamicSignatureState[normalizeSectionDomKey(ctx.key)]||{value:''};
+  return String(state.value||'').trim();
+}
+
+function applySignatureValueToContext(ctx,dataUrl){
+  var value=String(dataUrl||'').trim();
+  if(!ctx || !ctx.type) return;
+  if(ctx.type==='fixed'){
+    fixedSignatureData=value;
+    updateFixedSignatureUi();
+    return;
+  }
+  setDynamicSignatureValue(ctx.key,value);
+}
+
+function updateSignatureModalUiState(){
+  var statusEl=document.getElementById('sig-modal-status');
+  var saveBtn=document.getElementById('sig-modal-save');
+  var canvas=document.getElementById('sig-modal-canvas');
+  var signed=signatureModalDraft.signed===true && !!String(signatureModalDraft.value||'').trim();
+  if(statusEl){
+    statusEl.textContent=signed?'✓ Firma lista para guardar':'Sin firmar';
+  }
+  if(saveBtn){
+    saveBtn.disabled=!signed;
+    saveBtn.style.opacity=signed?'':'0.65';
+  }
+  if(canvas){
+    canvas.classList.toggle('signed',signed);
+  }
+}
+
+function initSignatureModalPad(initialData){
+  var canvas=document.getElementById('sig-modal-canvas');
+  if(!canvas) return;
+  if(!signatureModalPad){
+    signatureModalPad=createSignaturePad(canvas,{
+      lineWidth:3,
+      minLineWidth:1.1,
+      maxLineWidth:4.8,
+      velocityFactor:2.45,
+      velocityFilterWeight:0.78,
+      strokeStyle:'#111827',
+      onCommit:function(value,signed){
+        signatureModalDraft={signed:!!signed,value:value||''};
+        updateSignatureModalUiState();
+      }
+    });
+  }
+  signatureModalPad.resize();
+  signatureModalPad.setDataUrl(initialData||'');
+}
+
+function openSignatureModal(context){
+  var ctx=context||{};
+  signatureModalContext={
+    type:ctx.type==='dynamic'?'dynamic':'fixed',
+    key:ctx.key||'fixed',
+    label:String(ctx.label||'Firma').trim()||'Firma'
+  };
+  var titleEl=document.getElementById('sig-modal-title');
+  var subEl=document.getElementById('sig-modal-sub');
+  if(titleEl){
+    titleEl.textContent='Firmar: '+signatureModalContext.label;
+  }
+  if(subEl){
+    subEl.textContent='Traza tu firma y pulsa Guardar firma';
+  }
+  signatureModalDraft={signed:false,value:''};
+  updateSignatureModalUiState();
+  openM('m-sign');
+  setTimeout(function(){
+    initSignatureModalPad(getSignatureValueFromContext(signatureModalContext));
+  },20);
+}
+
+function openFixedSignatureModal(){
+  openSignatureModal({type:'fixed',key:'fixed',label:'Firma del responsable'});
+}
+
+function openDynamicSignatureModal(sectionId){
+  var key=normalizeSectionDomKey(sectionId);
+  var labelEl=document.getElementById('sigdyn-lbl-'+key);
+  var label=labelEl?String(labelEl.textContent||'').trim():'Firma dinámica';
+  openSignatureModal({type:'dynamic',key:key,label:label||'Firma dinámica'});
+}
+
+function closeSignatureModal(){
+  closeM('m-sign');
+}
+
+function clearSignatureModalCanvas(){
+  if(!signatureModalPad) return;
+  signatureModalPad.clear();
+}
+
+function normalizeSavedSignatureDataUrl(dataUrl){
+  var src=String(dataUrl||'').trim();
+  if(!src) return Promise.resolve('');
+  return new Promise(function(resolve){
+    var img=new Image();
+    img.onload=function(){
+      try{
+        var sourceW=Math.max(1,img.naturalWidth||img.width||1);
+        var sourceH=Math.max(1,img.naturalHeight||img.height||1);
+        var srcCanvas=document.createElement('canvas');
+        srcCanvas.width=sourceW;
+        srcCanvas.height=sourceH;
+        var srcCtx=srcCanvas.getContext('2d');
+        srcCtx.drawImage(img,0,0,sourceW,sourceH);
+        var px=srcCtx.getImageData(0,0,sourceW,sourceH).data;
+        var minX=sourceW,minY=sourceH,maxX=-1,maxY=-1;
+        for(var y=0;y<sourceH;y++){
+          for(var x=0;x<sourceW;x++){
+            var idx=((y*sourceW)+x)*4;
+            var alpha=px[idx+3];
+            if(alpha>8){
+              if(x<minX) minX=x;
+              if(y<minY) minY=y;
+              if(x>maxX) maxX=x;
+              if(y>maxY) maxY=y;
+            }
+          }
+        }
+        if(maxX<0 || maxY<0){
+          resolve(src);
+          return;
+        }
+        var boxW=maxX-minX+1;
+        var boxH=maxY-minY+1;
+        if(boxW<2 || boxH<2){
+          resolve(src);
+          return;
+        }
+        var padding=Math.max(8,Math.round(Math.max(boxW,boxH)*0.12));
+        var cropX=Math.max(0,minX-padding);
+        var cropY=Math.max(0,minY-padding);
+        var cropRight=Math.min(sourceW,maxX+padding+1);
+        var cropBottom=Math.min(sourceH,maxY+padding+1);
+        var cropW=Math.max(1,cropRight-cropX);
+        var cropH=Math.max(1,cropBottom-cropY);
+
+        var outCanvas=document.createElement('canvas');
+        outCanvas.width=sourceW;
+        outCanvas.height=sourceH;
+        var outCtx=outCanvas.getContext('2d');
+        outCtx.clearRect(0,0,sourceW,sourceH);
+        outCtx.imageSmoothingEnabled=true;
+        if('imageSmoothingQuality' in outCtx){ outCtx.imageSmoothingQuality='high'; }
+        var targetW=sourceW*0.88;
+        var targetH=sourceH*0.78;
+        var ratio=Math.min(targetW/cropW,targetH/cropH);
+        var drawW=Math.max(1,cropW*ratio);
+        var drawH=Math.max(1,cropH*ratio);
+        var drawX=(sourceW-drawW)/2;
+        var drawY=(sourceH-drawH)/2;
+        outCtx.drawImage(srcCanvas,cropX,cropY,cropW,cropH,drawX,drawY,drawW,drawH);
+        resolve(outCanvas.toDataURL('image/png'));
+      }catch(_err){
+        resolve(src);
+      }
+    };
+    img.onerror=function(){
+      resolve(src);
+    };
+    img.src=src;
+  });
+}
+
+async function saveSignatureModal(){
+  if(!(signatureModalDraft.signed && signatureModalDraft.value)){
+    toast('✏️ Realiza la firma antes de guardar');
+    return;
+  }
+  var saveBtn=document.getElementById('sig-modal-save');
+  if(saveBtn){
+    saveBtn.disabled=true;
+    saveBtn.textContent='Guardando...';
+  }
+  var normalized=await normalizeSavedSignatureDataUrl(signatureModalDraft.value);
+  applySignatureValueToContext(signatureModalContext,normalized||signatureModalDraft.value);
+  closeSignatureModal();
+  toast('✅ Firma guardada');
+  if(saveBtn){
+    saveBtn.disabled=false;
+    saveBtn.textContent='Guardar firma';
+  }
+}
+
+function clearSig(){
+  fixedSignatureData='';
+  sigSigned=false;
+  updateFixedSignatureUi();
+}
+
+function clearSectionSignature(sectionId){
+  var key=normalizeSectionDomKey(sectionId);
+  setDynamicSignatureValue(key,'');
+}
+
+function buildWorkDynamicHtml(ck){
+  var dynHtml='';
+  chkState={};
+  dynamicSignatureState={};
+  var sections=(ck&&Array.isArray(ck.sections))?ck.sections:[];
+  sections.forEach(function(sec,si){
+    if(sec.type==='checklist'){
+      dynHtml+='<div class="sec" style="margin-top:16px;">'+sec.title+'</div><div class="cl-list" id="cl-sec-'+si+'">';
+      (sec.items||[]).forEach(function(item,ii){
+        var key='s'+si+'i'+ii;
+        chkState[key]=false;
+        dynHtml+='<div class="ci" id="ci-'+key+'" onclick="toggleCheck(\''+key+'\')"><div class="ci-box" id="cb-'+key+'"></div><span class="ci-lbl">'+item.text+'</span><span class="ci-cat">'+(item.cat||'General')+'</span></div>';
+      });
+      dynHtml+='</div>';
+      return;
+    }
+    if(sec.type==='fields'){
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+sec.title+'</div>';
+      (sec.fields||[]).forEach(function(f){
+        dynHtml+='<div class="dyn-field"><label>'+f.label+'</label>'+(f.inputType==='textarea'?'<textarea class="ft" id="df-'+f.id+'" placeholder="'+f.label+'..."></textarea>':'<input class="fi" id="df-'+f.id+'" type="'+f.inputType+'" placeholder="'+f.label+'">')+'</div>';
+      });
+      dynHtml+='</div>';
+      return;
+    }
+    if(sec.type==='textarea'){
+      dynHtml+='<div class="fg" style="margin-top:14px;"><label class="fl">'+sec.title+'</label><textarea class="ft" id="dta-'+sec.id+'" placeholder="'+(sec.placeholder||'Escribe aquí...')+'"></textarea></div>';
+      return;
+    }
+    if(sec.type==='multiple_choice'){
+      var secKey=normalizeSectionDomKey(sec.id||('mc-'+si));
+      var requiredLabel=sec.required===true?' <span style="color:var(--accent)">*</span>':'';
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+(sec.title||'Opción múltiple')+'</div><div class="dyn-field"><label>'+(sec.label||'Pregunta')+requiredLabel+'</label><div class="mc-choice-grid">';
+      (sec.options||[]).forEach(function(opt,oi){
+        dynHtml+='<label class="mc-choice-item"><input type="radio" name="mc-'+secKey+'" value="'+opt+'"><span>'+opt+'</span></label>';
+      });
+      dynHtml+='</div></div></div>';
+      return;
+    }
+    if(sec.type==='signature'){
+      var sigKey=normalizeSectionDomKey(sec.id||('sig-'+si));
+      var sigSectionRef=String(sec.id||('sig-'+si)).replace(/'/g,"\\'");
+      var req=sec.required===true?' <span style="color:var(--accent)">*</span>':'';
+      var sigLabel=sec.label||'Firma';
+      var safeSigLabel=mapEscapeHtml(sigLabel);
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+(sec.title||'Firma')+'</div><div class="dyn-field"><label id="sigdyn-lbl-'+sigKey+'">'+safeSigLabel+req+'</label><div class="sig-inline-card"><div class="sig-inline-preview" id="sigdyn-prev-'+sigKey+'"><img id="sigdyn-img-'+sigKey+'" alt="'+safeSigLabel+'"><span class="sig-inline-empty">Sin firma capturada</span></div><div class="sig-inline-actions"><div style="display:flex;gap:8px;align-items:center;"><button class="btn btn-primary btn-sm" onclick="openDynamicSignatureModal(\''+sigSectionRef+'\')">Firmar</button><button class="btn btn-ghost btn-sm" onclick="clearSectionSignature(\''+sigSectionRef+'\')">Limpiar firma</button></div><span class="sig-dyn-status" id="sigdyn-st-'+sigKey+'">Sin firmar</span></div></div></div></div>';
+      return;
+    }
+  });
+  if(!dynHtml){
+    chkState['s0i0']=false;
+    dynHtml='<div class="sec" style="margin-top:16px;">Actividades</div><div class="cl-list"><div class="ci" id="ci-s0i0" onclick="toggleCheck(\'s0i0\')"><div class="ci-box" id="cb-s0i0"></div><span class="ci-lbl">Revisión general</span><span class="ci-cat">General</span></div></div>';
+  }
+  return dynHtml;
+}
+
+function initDynamicWorkSections(ck){
+  var sections=(ck&&Array.isArray(ck.sections))?ck.sections:[];
+  sections.forEach(function(sec,si){
+    if(sec.type==='signature'){
+      var key=normalizeSectionDomKey(sec.id||('sig-'+si));
+      if(!dynamicSignatureState[key]){
+        dynamicSignatureState[key]={signed:false,value:''};
+      }
+      updateDynamicSignatureUi(key);
+    }
+  });
+}
+
+function renderTechChecklistPage(){
+  var box=document.getElementById('tech-checklist-grid');
+  if(!box) return;
+  var list=DB.checklists.filter(function(cl){ return cl && cl.published===true; });
+  if(!list.length){
+    box.innerHTML='<div class="empty"><div class="empty-ico">🧾</div>No hay checklists publicados por el administrador</div>';
+    return;
+  }
+  box.innerHTML=list.map(function(cl){
+    var totalItems=0;
+    (cl.sections||[]).forEach(function(sec){ if(sec.type==='checklist') totalItems+=(sec.items||[]).length; });
+    return '<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(34,197,94,.12);">🧾</div><div><div class="card-title">'+cl.name+'</div><div class="card-sub">'+cl.type+'</div></div></div></div><div style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;margin-bottom:10px;"><span>📅 '+formatChecklistDate(cl.updatedAt||cl.createdAt)+'</span><span>☑️ '+totalItems+' tareas</span></div><button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="openTechChecklistWork(\''+cl.id+'\')">Iniciar checklist</button></div>';
+  }).join('');
+}
+
+function openTechChecklistWork(checklistId){
+  var ck=gCl(checklistId);
+  if(!ck){ toast('⚠️ Checklist no disponible'); return; }
+  goTo('tech',document.getElementById('ni-tech'));
+  currentWorkMode='free';
+  currentFreeChecklistId=checklistId;
+  curOrderId=null;
+  notifyLiveTrackingContext();
+  document.getElementById('wd-id').textContent='LIBRE-'+String(Date.now()).slice(-6);
+  document.getElementById('wd-name').textContent=ck.name;
+  document.getElementById('wd-loc').textContent='Checklist libre · '+ck.type;
+
+  var dynHtml=buildWorkDynamicHtml(ck);
+  document.getElementById('wd-dynamic').innerHTML=dynHtml;
+  initDynamicWorkSections(ck);
+  sigSigned=false;
+  document.getElementById('sig-st').textContent='Sin firmar';
+  resetPhotoSlots();
+  clearSig();
+  updateProg();
+  setWorkModeButtonLabel();
+  document.getElementById('wd-wrap').style.display='block';
+  setTimeout(refreshVisibleSignaturePads,20);
+  setTimeout(function(){ document.getElementById('wd-wrap').scrollIntoView({behavior:'smooth'}); },80);
+  toast('🧾 Checklist abierto');
+}
+
 function renderTechView(){
   var sel=document.getElementById('tv-sel'),prev=sel.value;
   sel.innerHTML=DB.technicians.filter(function(t){return t.status==='active';}).map(function(t){return'<option value="'+t.id+'">'+t.name+'</option>';}).join('');
   var found=false; for(var i=0;i<DB.technicians.length;i++) if(DB.technicians[i].id===prev){found=true;break;}
   if(found) sel.value=prev;
   switchTech(sel.value);
+  renderTechLiveGpsPanel();
 }
 
 function switchTech(tid){
@@ -925,6 +2747,10 @@ function switchTech(tid){
   document.getElementById('tv-av').textContent=initials(t.name);
   document.getElementById('tv-av').style.background='linear-gradient(135deg,'+techColor(tid)+',#c2410c)';
   document.getElementById('tv-name').textContent=t.name;
+  var sub=document.getElementById('tv-subline');
+  if(sub){
+    sub.innerHTML='<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;"></span>'+(t.spec||'Técnico de campo')+' · En línea';
+  }
   var myOrders=DB.orders.filter(function(o){return o.techId===tid&&o.status!=='done';});
   var html=myOrders.map(function(o){
     var cl=gClient(o.clientId),br=gBranch(o.branchId),lbl=o.status==='pending'?'Pendiente':'En Progreso',cls=o.status==='pending'?'b-pend':'b-prog';
@@ -935,63 +2761,37 @@ function switchTech(tid){
   }).join('');
   document.getElementById('tv-list').innerHTML=html||'<div class="empty"><div class="empty-ico">🎉</div>Sin órdenes pendientes</div>';
   document.getElementById('wd-wrap').style.display='none';
+  currentWorkMode='order';
+  currentFreeChecklistId='';
+  setWorkModeButtonLabel();
+  curOrderId=null;
+  notifyLiveTrackingContext();
 }
 
 function openWork(id){
   var o=null; for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===id){o=DB.orders[i];break;}
   if(!o) return;
+  currentWorkMode='order';
+  currentFreeChecklistId='';
+  setWorkModeButtonLabel();
   curOrderId=id;
+  notifyLiveTrackingContext();
   var cl=gClient(o.clientId),br=gBranch(o.branchId),ck=gCl(o.clId);
   document.getElementById('wd-id').textContent=o.id;
   document.getElementById('wd-name').textContent=o.type;
   document.getElementById('wd-loc').textContent=(cl?cl.name:'—')+' — '+(br?br.name:'—');
 
-  chkState={};
-  var dynHtml='';
-
-  if(ck){
-    ck.sections.forEach(function(sec,si){
-      if(sec.type==='checklist'){
-        dynHtml+='<div class="sec" style="margin-top:16px;">'+sec.title+'</div><div class="cl-list" id="cl-sec-'+si+'">';
-        sec.items.forEach(function(item,ii){
-          var key='s'+si+'i'+ii;
-          chkState[key]=false;
-          dynHtml+='<div class="ci" id="ci-'+key+'" onclick="toggleCheck(\''+key+'\')">'
-            +'<div class="ci-box" id="cb-'+key+'"></div>'
-            +'<span class="ci-lbl">'+item.text+'</span>'
-            +'<span class="ci-cat">'+item.cat+'</span>'
-            +'</div>';
-        });
-        dynHtml+='</div>';
-      }
-      if(sec.type==='fields'){
-        dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+sec.title+'</div>';
-        sec.fields.forEach(function(f){
-          dynHtml+='<div class="dyn-field"><label>'+f.label+'</label>';
-          if(f.inputType==='textarea') dynHtml+='<textarea class="ft" id="df-'+f.id+'" placeholder="'+f.label+'..."></textarea>';
-          else dynHtml+='<input class="fi" id="df-'+f.id+'" type="'+f.inputType+'" placeholder="'+f.label+'">';
-          dynHtml+='</div>';
-        });
-        dynHtml+='</div>';
-      }
-      if(sec.type==='textarea'){
-        dynHtml+='<div class="fg" style="margin-top:14px;"><label class="fl">'+sec.title+'</label>'
-          +'<textarea class="ft" id="dta-'+sec.id+'" placeholder="'+sec.placeholder+'"></textarea></div>';
-      }
-    });
-  } else {
-    chkState['s0i0']=false;
-    dynHtml='<div class="sec" style="margin-top:16px;">Actividades</div><div class="cl-list"><div class="ci" id="ci-s0i0" onclick="toggleCheck(\'s0i0\')"><div class="ci-box" id="cb-s0i0"></div><span class="ci-lbl">Revisión general</span><span class="ci-cat">General</span></div></div>';
-  }
-
+  var dynHtml=buildWorkDynamicHtml(ck);
   document.getElementById('wd-dynamic').innerHTML=dynHtml;
-  sigSigned=false; photoCnt=0;
+  initDynamicWorkSections(ck);
+  sigSigned=false;
   document.getElementById('sig-st').textContent='Sin firmar';
-  document.querySelectorAll('.ph-slot').forEach(function(s){ s.classList.remove('filled'); s.innerHTML='<span style="font-size:20px;">📷</span><span>Foto</span>'; });
+  resetPhotoSlots();
   clearSig();
   updateProg();
   o.status='progress';
   document.getElementById('wd-wrap').style.display='block';
+  setTimeout(refreshVisibleSignaturePads,20);
   setTimeout(function(){ document.getElementById('wd-wrap').scrollIntoView({behavior:'smooth'}); },80);
   toast('📋 Orden '+id+' abierta');
   renderDashboard();
@@ -1013,41 +2813,1783 @@ function updateProg(){
   document.getElementById('wd-fill').style.width=pct+'%';
 }
 
-var IMGS=['data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect fill="%23374151" width="80" height="80"/><text x="40" y="48" text-anchor="middle" fill="%236b7280" font-size="9" font-family="sans-serif">Compresor</text></svg>','data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect fill="%231f2937" width="80" height="80"/><text x="40" y="48" text-anchor="middle" fill="%236b7280" font-size="9" font-family="sans-serif">Filtro A/C</text></svg>','data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect fill="%23111827" width="80" height="80"/><text x="40" y="48" text-anchor="middle" fill="%236b7280" font-size="9" font-family="sans-serif">Panel Elec.</text></svg>'];
-function addPhoto(slot){ if(slot.classList.contains('filled'))return; slot.classList.add('filled'); slot.innerHTML='<img src="'+IMGS[photoCnt%3]+'" alt="">'; photoCnt++; toast('📷 Foto agregada'); }
+var selectedPhotoSlot=null;
+var pendingPhotos=[null,null,null];
+var closingOrderInProgress=false;
+var lastGeneratedPdfUrl='';
+var lastGeneratedPdfName='';
+
+function withTimeout(promise,ms,label){
+  return new Promise(function(resolve,reject){
+    var settled=false;
+    var timer=setTimeout(function(){
+      if(settled) return;
+      settled=true;
+      reject(new Error((label||'Operación')+' excedió el tiempo de espera'));
+    },ms);
+
+    Promise.resolve(promise)
+      .then(function(value){
+        if(settled) return;
+        settled=true;
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(function(err){
+        if(settled) return;
+        settled=true;
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+function geoErrorLabel(err){
+  if(!err || typeof err.code!=='number') return 'No se pudo obtener la ubicación.';
+  if(err.code===1) return 'Permiso de ubicación denegado.';
+  if(err.code===2) return 'No se pudo determinar la ubicación.';
+  if(err.code===3) return 'Tiempo de espera agotado al obtener ubicación.';
+  return 'Error de ubicación.';
+}
+
+function getCurrentPositionOnce(options){
+  return new Promise(function(resolve,reject){
+    if(!navigator.geolocation){ reject(new Error('Geolocalización no soportada')); return; }
+    navigator.geolocation.getCurrentPosition(resolve,reject,options||{});
+  });
+}
+
+async function reverseGeocodeCoords(lat,lng){
+  try{
+    var url='https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=es&lat='+encodeURIComponent(String(lat))+'&lon='+encodeURIComponent(String(lng));
+    var res=await withTimeout(fetch(url,{method:'GET'}),7000,'Geocoding');
+    if(!res || !res.ok) return '';
+    var data=await res.json();
+    return data && data.display_name ? String(data.display_name) : '';
+  }catch(_err){
+    return '';
+  }
+}
+
+async function getTabletLocationForReport(){
+  if(!navigator.geolocation){
+    toast('⚠️ Este dispositivo no soporta geolocalización');
+    return null;
+  }
+
+  try{
+    if(navigator.permissions && navigator.permissions.query){
+      var perm=await navigator.permissions.query({name:'geolocation'});
+      if(perm && perm.state==='denied'){
+        toast('⚠️ Activa permisos de ubicación para registrar el servicio');
+        return null;
+      }
+    }
+  }catch(_permErr){}
+
+  var attempts=[
+    {enableHighAccuracy:true,timeout:12000,maximumAge:0},
+    {enableHighAccuracy:true,timeout:20000,maximumAge:30000}
+  ];
+  var lastError=null;
+  toast('📍 Obteniendo ubicación GPS...');
+
+  for(var i=0;i<attempts.length;i++){
+    try{
+      var pos=await getCurrentPositionOnce(attempts[i]);
+      var lat=Number((pos.coords.latitude||0).toFixed(6));
+      var lng=Number((pos.coords.longitude||0).toFixed(6));
+      var accuracy=Math.round(pos.coords.accuracy||0);
+      var address=await reverseGeocodeCoords(lat,lng);
+      if(accuracy>120){
+        toast('📍 Ubicación aproximada detectada ('+accuracy+'m)');
+      }else{
+        toast('📍 Ubicación capturada');
+      }
+      return {
+        lat:lat,
+        lng:lng,
+        accuracy:accuracy,
+        address:address||'',
+        capturedAt:new Date().toISOString()
+      };
+    }catch(err){
+      lastError=err;
+      console.warn('Intento de geolocalización fallido:',i+1,err);
+    }
+  }
+
+  toast('⚠️ '+geoErrorLabel(lastError));
+  return null;
+}
+
+function getJsPdfCtor(){
+  if(window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
+  if(typeof window.jsPDF==='function') return window.jsPDF;
+  return null;
+}
+
+function toPdfDate(dateValue){
+  if(dateValue instanceof Date && !isNaN(dateValue.getTime())) return dateValue;
+  if(dateValue && typeof dateValue.toDate==='function'){
+    var parsed=dateValue.toDate();
+    if(parsed instanceof Date && !isNaN(parsed.getTime())) return parsed;
+  }
+  if(dateValue && typeof dateValue.seconds==='number'){
+    var fromSeconds=new Date(dateValue.seconds*1000);
+    if(!isNaN(fromSeconds.getTime())) return fromSeconds;
+  }
+  var d=new Date(dateValue||Date.now());
+  if(isNaN(d.getTime())) d=new Date();
+  return d;
+}
+
+function formatPdfStamp(dateValue){
+  var d=toPdfDate(dateValue);
+  return d.toLocaleString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
+function formatPdfDateOnly(dateValue){
+  var d=toPdfDate(dateValue);
+  return d.toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+}
+
+function formatPdfTimeOnly(dateValue){
+  var d=toPdfDate(dateValue);
+  return d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+}
+
+function fileSafeStamp(dateValue){
+  var d=toPdfDate(dateValue);
+  var yy=d.getFullYear();
+  var mm=String(d.getMonth()+1).padStart(2,'0');
+  var dd=String(d.getDate()).padStart(2,'0');
+  var hh=String(d.getHours()).padStart(2,'0');
+  var mi=String(d.getMinutes()).padStart(2,'0');
+  return yy+mm+dd+'-'+hh+mi;
+}
+
+function safePdfText(value,fallback){
+  var text=String(value==null?'':value).trim();
+  if(!text) return fallback||'—';
+  return text;
+}
+
+function ensurePdfSpace(doc,y,required,layout){
+  var maxY=layout.pageH-layout.footerH;
+  if(y+required<=maxY) return y;
+  doc.addPage();
+  return layout.top;
+}
+
+function blobToDataUrl(blob){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(){ resolve(reader.result||''); };
+    reader.onerror=function(){ reject(new Error('No se pudo leer imagen')); };
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function resolvePdfImageSource(src){
+  var raw=String(src||'').trim();
+  if(!raw) return '';
+  if(raw.indexOf('data:image/')===0) return raw;
+  if(raw.indexOf('http://')===0 || raw.indexOf('https://')===0 || raw.indexOf('blob:')===0){
+    try{
+      var response=await fetch(raw);
+      if(!response.ok) throw new Error('HTTP '+response.status);
+      var blob=await response.blob();
+      return await blobToDataUrl(blob);
+    }catch(err){
+      console.warn('No se pudo cargar imagen para PDF:',raw,err);
+      return '';
+    }
+  }
+  try{
+    var localResponse=await fetch(raw);
+    if(!localResponse.ok) throw new Error('HTTP '+localResponse.status);
+    var localBlob=await localResponse.blob();
+    return await blobToDataUrl(localBlob);
+  }catch(_err){
+    return '';
+  }
+}
+
+async function resolvePdfPhotos(photoList){
+  var sources=Array.isArray(photoList)?photoList:[];
+  var maxPhotos=Math.min(sources.length,12);
+  var resolved=await Promise.all(sources.slice(0,maxPhotos).map(function(src){
+    return resolvePdfImageSource(src);
+  }));
+  var sanitized=resolved.filter(function(src){ return !!src; });
+  var withMeta=await Promise.all(sanitized.map(async function(src){
+    var size=await getPdfImageDimensions(src);
+    return {
+      src:src,
+      width:size.width,
+      height:size.height
+    };
+  }));
+  return withMeta;
+}
+
+function getPdfImageDimensions(src){
+  return new Promise(function(resolve){
+    var img=new Image();
+    img.onload=function(){
+      resolve({
+        width:img.naturalWidth||img.width||0,
+        height:img.naturalHeight||img.height||0
+      });
+    };
+    img.onerror=function(){
+      resolve({width:0,height:0});
+    };
+    img.src=src;
+  });
+}
+
+var pdfBrandLogoAssetPromise=null;
+async function getPdfBrandLogoAsset(){
+  if(pdfBrandLogoAssetPromise) return pdfBrandLogoAssetPromise;
+  pdfBrandLogoAssetPromise=(async function(){
+    try{
+      var src=await resolvePdfImageSource('./assets/logo-main.png');
+      if(!src) return null;
+      var dims=await getPdfImageDimensions(src);
+      return {
+        src:src,
+        width:dims.width||0,
+        height:dims.height||0
+      };
+    }catch(_err){
+      return null;
+    }
+  })();
+  return pdfBrandLogoAssetPromise;
+}
+
+function getReportSections(reportData){
+  if(reportData && reportData.respuestas && Array.isArray(reportData.respuestas.sections)){
+    return reportData.respuestas.sections;
+  }
+  if(reportData && reportData.answers && Array.isArray(reportData.answers.sections)){
+    return reportData.answers.sections;
+  }
+  if(reportData && Array.isArray(reportData.sections)){
+    return reportData.sections;
+  }
+  return [];
+}
+
+function extractDynamicSignaturesFromSections(sections){
+  var list=[];
+  (Array.isArray(sections)?sections:[]).forEach(function(sec){
+    if(!sec || sec.type!=='signature') return;
+    var value=String(sec.value||'').trim();
+    if(!value) return;
+    list.push({
+      label:safePdfText(sec.label||sec.title||'Firma','Firma'),
+      value:value
+    });
+  });
+  return list;
+}
+
+function normalizeLookupLabel(value){
+  return String(value||'')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'');
+}
+
+function normalizeTemplateType(value){
+  var raw=String(value||'').trim().toLowerCase();
+  if(raw==='correctivo') return 'correctivo';
+  if(raw==='generic' || raw==='generico' || raw==='genérico') return 'generic';
+  return '';
+}
+
+function resolvePdfTemplateType(reportData){
+  var source=reportData||{};
+  var direct=normalizeTemplateType(
+    source.templateType ||
+    source.checklistTemplateType ||
+    (source.checklist && source.checklist.templateType)
+  );
+  if(direct) return direct;
+  var hint=normalizeLookupLabel(
+    String(source.checklistNombre || source.checklistName || (source.checklist && source.checklist.name) || '')+
+    ' '+
+    String(source.checklistType || source.tipoMantenimiento || '')
+  );
+  if(hint.indexOf('correctivo')!==-1) return 'correctivo';
+  return 'generic';
+}
+
+function findSectionValueByKeywords(sections,keywords){
+  if(!Array.isArray(sections) || !sections.length) return '';
+  var terms=(keywords||[]).map(normalizeLookupLabel);
+  function hasTerm(label){
+    var normalized=normalizeLookupLabel(label);
+    return terms.some(function(term){ return normalized.indexOf(term)!==-1; });
+  }
+  for(var i=0;i<sections.length;i++){
+    var sec=sections[i]||{};
+    if(sec.type==='fields'){
+      var fields=Array.isArray(sec.fields)?sec.fields:[];
+      for(var j=0;j<fields.length;j++){
+        var field=fields[j]||{};
+        if(hasTerm(field.label) && String(field.value||'').trim()){
+          return String(field.value||'').trim();
+        }
+      }
+    }
+    if(sec.type==='textarea'){
+      if(hasTerm(sec.title) && String(sec.value||'').trim()){
+        return String(sec.value||'').trim();
+      }
+    }
+    if(sec.type==='multiple_choice'){
+      var mcLabel=sec.label||sec.title||'';
+      if(hasTerm(mcLabel) && String(sec.value||'').trim()){
+        return String(sec.value||'').trim();
+      }
+    }
+    if(sec.type==='signature'){
+      var sigLabel=sec.label||sec.title||'';
+      if(hasTerm(sigLabel) && String(sec.value||'').trim()){
+        return String(sec.value||'').trim();
+      }
+    }
+  }
+  return '';
+}
+
+function resolveChecklistItemState(item){
+  var rawStatus=normalizeLookupLabel(item && (item.estado||item.status||item.result||''));
+  var noAplica=!!(item && (item.noAplica===true || item.notApplicable===true || item.na===true));
+  if(rawStatus && (rawStatus==='na' || rawStatus==='n/a' || rawStatus.indexOf('no aplica')!==-1 || rawStatus.indexOf('not applicable')!==-1)){
+    noAplica=true;
+  }
+  if(noAplica){
+    return {label:'No aplica',fill:[241,245,249],text:[51,65,85]};
+  }
+  var realizado=!!(item && (item.checked===true || item.done===true || item.completed===true));
+  if(rawStatus && (rawStatus.indexOf('realizado')!==-1 || rawStatus==='ok' || rawStatus==='si' || rawStatus==='hecho')){
+    realizado=true;
+  }
+  if(rawStatus && (rawStatus.indexOf('no realizado')!==-1 || rawStatus==='no')){
+    realizado=false;
+  }
+  if(realizado){
+    return {label:'Realizado',fill:[220,252,231],text:[22,101,52]};
+  }
+  return {label:'No realizado',fill:[254,226,226],text:[153,27,27]};
+}
+
+function formatGpsLabel(locationData){
+  if(!locationData || typeof locationData!=='object') return 'No especificado';
+  var lat=Number(locationData.lat);
+  var lng=Number(locationData.lng);
+  var acc=Number(locationData.accuracy);
+  if(isFinite(lat) && isFinite(lng)){
+    return lat.toFixed(6)+', '+lng.toFixed(6)+(isFinite(acc) && acc>0 ? (' (±'+Math.round(acc)+'m)') : '');
+  }
+  var addr=String(locationData.address||locationData.direccionAprox||'').trim();
+  return addr || 'No especificado';
+}
+
+function buildGoogleMapsUrl(locationData){
+  if(!locationData || typeof locationData!=='object') return '';
+  var lat=Number(locationData.lat);
+  var lng=Number(locationData.lng);
+  if(!isFinite(lat) || !isFinite(lng)) return '';
+  return 'https://www.google.com/maps?q='+encodeURIComponent(String(lat)+','+String(lng));
+}
+
+function buildPdfReportModel(reportData){
+  var source=reportData||{};
+  var sections=getReportSections(source);
+  var locationData=source.ubicacion||source.location||source.gps||null;
+  var mergedPhotos=[]
+    .concat(Array.isArray(source.photoPreviews)?source.photoPreviews:[])
+    .concat(Array.isArray(source.fotos)?source.fotos:[])
+    .concat(Array.isArray(source.photos)?source.photos:[]);
+  var uniquePhotos=[];
+  var photoMap={};
+  mergedPhotos.forEach(function(src){
+    var key=String(src||'').trim();
+    if(!key || photoMap[key]) return;
+    photoMap[key]=true;
+    uniquePhotos.push(key);
+  });
+
+  var generatedAt=toPdfDate(source.fecha||source.createdAt||source.updatedAt||Date.now());
+  var gerenteFallback=findSectionValueByKeywords(sections,['gerente','encargado']);
+  var sucursalFallback=findSectionValueByKeywords(sections,['sucursal']);
+  var clienteFallback=findSectionValueByKeywords(sections,['cliente']);
+  var fallaFallback=findSectionValueByKeywords(sections,['falla','problema','reporte']);
+  var servicioFallback=findSectionValueByKeywords(sections,['servicio','trabajo realizado','actividad realizada','accion realizada']);
+  var materialesFallback=findSectionValueByKeywords(sections,['material','refaccion','insumo','consumible']);
+  var obsFallback=findSectionValueByKeywords(sections,['observacion','comentario','nota','recomendacion']);
+
+  return {
+    folio:safePdfText(source.folio||source.ordenId||source.id,'Sin folio'),
+    generatedAt:generatedAt,
+    fechaTexto:safePdfText(source.fechaTexto||source.fechaLabel||formatPdfDateOnly(generatedAt),'No especificado'),
+    horaInicio:safePdfText(source.horaInicio||source.startTime||formatPdfTimeOnly(generatedAt),'No especificado'),
+    horaFin:safePdfText(source.horaFin||source.endTime||formatPdfTimeOnly(generatedAt),'No especificado'),
+    duracion:safePdfText(source.duracion||source.duration,'No especificado'),
+    estado:safePdfText(source.estatus||source.status,'COMPLETADO').toUpperCase(),
+    gerente:safePdfText(source.gerenteTurno||source.gerente||gerenteFallback,'No especificado'),
+    sucursal:safePdfText(source.sucursalNombre||source.sucursal||sucursalFallback,'No especificado'),
+    tecnico:safePdfText(source.tecnicoNombre||source.tecnico,'No especificado'),
+    cliente:safePdfText(source.clienteNombre||source.cliente||clienteFallback,'No especificado'),
+    falla:safePdfText(source.fallaReportada||source.falla||fallaFallback,'No especificado'),
+    servicio:safePdfText(source.servicioRealizado||source.servicio||source.descripcionServicio||servicioFallback,'No especificado'),
+    materiales:safePdfText(source.materiales||materialesFallback,'No especificado'),
+    observaciones:safePdfText(source.observaciones||obsFallback,'No especificado'),
+    gps:safePdfText(source.gpsLabel||formatGpsLabel(locationData),'No especificado'),
+    googleMapsUrl:buildGoogleMapsUrl(locationData),
+    templateType:resolvePdfTemplateType(source),
+    checklistName:safePdfText(source.checklistNombre||source.checklistName,'Checklist de servicio'),
+    sections:sections,
+    dynamicSignatures:extractDynamicSignaturesFromSections(sections),
+    photos:uniquePhotos,
+    signatureTecnico:String(source.firmaTecnico||source.technicianSignatureData||source.signatureData||'').trim(),
+    signatureGerente:String(source.firmaGerente||source.managerSignatureData||source.signatureManagerData||'').trim()
+  };
+}
+
+function drawPdfSectionHeading(doc,layout,y,number,title){
+  y=ensurePdfSpace(doc,y,12,layout);
+  doc.setDrawColor(226,226,222);
+  doc.setLineWidth(0.22);
+  doc.line(layout.margin+18,y+1.5,layout.pageW-layout.margin,y+1.5);
+  doc.setFont('courier','bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(209,0,0);
+  doc.text(String(number||''),layout.margin,y+2.1);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9.4);
+  doc.setTextColor(20,20,20);
+  doc.text(String(title||'').toUpperCase(),layout.margin+20,y+2.1);
+  return y+8.2;
+}
+
+function drawPdfFieldBox(doc,x,y,w,label,value){
+  var h=15;
+  doc.setDrawColor(232,232,228);
+  doc.setLineWidth(0.2);
+  doc.roundedRect(x,y,w,h,1.2,1.2);
+  doc.setFont('courier','normal');
+  doc.setFontSize(6.7);
+  doc.setTextColor(138,138,133);
+  doc.text(String(label||''),x+2.4,y+4);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9.3);
+  doc.setTextColor(20,20,20);
+  var lines=doc.splitTextToSize(safePdfText(value,'No especificado'),w-4.8);
+  doc.text(lines.slice(0,2),x+2.4,y+9.5);
+  return h;
+}
+
+function drawPdfTextBlock(doc,layout,y,label,text,variant){
+  var content=safePdfText(text,'No especificado');
+  var lines=doc.splitTextToSize(content,layout.contentW-8);
+  var lineHeight=4.8;
+  var boxH=Math.max(15,(lines.length*lineHeight)+7);
+  y=ensurePdfSpace(doc,y,boxH+4,layout);
+  var fill=[247,247,245];
+  var border=[187,187,181];
+  if(variant==='critical'){ fill=[255,244,244]; border=[209,0,0]; }
+  if(variant==='service'){ fill=[241,247,255]; border=[26,115,232]; }
+  doc.setFillColor(fill[0],fill[1],fill[2]);
+  doc.setDrawColor(232,232,228);
+  doc.roundedRect(layout.margin,y,layout.contentW,boxH,1.4,1.4,'FD');
+  doc.setFillColor(border[0],border[1],border[2]);
+  doc.rect(layout.margin,y,1.2,boxH,'F');
+  doc.setFont('courier','normal');
+  doc.setFontSize(6.8);
+  doc.setTextColor(138,138,133);
+  doc.text(String(label||''),layout.margin+3.3,y+4);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9.2);
+  doc.setTextColor(30,30,30);
+  doc.text(lines,layout.margin+3.3,y+9.4);
+  return y+boxH+3.2;
+}
+
+function buildPdfHeader(doc,layout,model){
+  var headH=25;
+  var stripH=13;
+  doc.setFillColor(209,0,0);
+  doc.rect(0,0,layout.pageW,headH,'F');
+  doc.setFillColor(168,0,0);
+  doc.rect(0,headH,layout.pageW,stripH,'F');
+
+  var logoAsset=model && model.brandLogo ? model.brandLogo : null;
+  if(logoAsset && logoAsset.src){
+    var logoBoxX=layout.margin;
+    var logoBoxY=4.8;
+    var logoBoxW=62;
+    var logoBoxH=15;
+    try{
+      var lw=Number(logoAsset.width)||0;
+      var lh=Number(logoAsset.height)||0;
+      var fitW=logoBoxW-3;
+      var fitH=logoBoxH-3;
+      var drawW=fitW;
+      var drawH=fitH;
+      if(lw>0 && lh>0){
+        var ratio=Math.min(fitW/lw,fitH/lh);
+        drawW=Math.max(1,lw*ratio);
+        drawH=Math.max(1,lh*ratio);
+      }
+      var drawX=logoBoxX+((logoBoxW-drawW)/2);
+      var drawY=logoBoxY+((logoBoxH-drawH)/2);
+      // Keep original PNG alpha channel over dark/red header.
+      var fmt='PNG';
+      if(logoAsset.src.indexOf('data:image/png')!==0){
+        fmt=logoAsset.src.indexOf('data:image/webp')===0?'WEBP':'PNG';
+      }
+      doc.addImage(logoAsset.src,fmt,drawX,drawY,drawW,drawH,undefined,'MEDIUM');
+    }catch(_err){
+      doc.setFont('courier','bold');
+      doc.setFontSize(16);
+      doc.setTextColor(255,255,255);
+      doc.text('BRISAM',layout.margin,12);
+    }
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(255,236,236);
+    doc.text('Servicios Integrales · RFC AEDB020529V33',layout.margin,22.3);
+  }else{
+    doc.setFont('courier','bold');
+    doc.setFontSize(20);
+    doc.setTextColor(255,255,255);
+    doc.text('BRISAM',layout.margin,10.8);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(255,236,236);
+    doc.text('Servicios Integrales · RFC AEDB020529V33',layout.margin,15.5);
+  }
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(255,228,228);
+  doc.text('Reporte de Servicio Técnico',layout.pageW-layout.margin,8.8,{align:'right'});
+  doc.setFont('courier','bold');
+  doc.setFontSize(13.5);
+  doc.setTextColor(255,255,255);
+  doc.text('RST-'+model.folio,layout.pageW-layout.margin,14.2,{align:'right'});
+
+  var chipW=44;
+  var chipH=6.5;
+  var chipX=layout.pageW-layout.margin-chipW;
+  var chipY=17;
+  doc.setDrawColor(255,255,255);
+  doc.setLineWidth(0.24);
+  doc.roundedRect(chipX,chipY,chipW,chipH,1.4,1.4);
+  doc.setFont('courier','normal');
+  doc.setFontSize(7);
+  doc.setTextColor(255,255,255);
+  doc.text(model.estado,chipX+(chipW/2),chipY+4.4,{align:'center'});
+
+  var metaCols=[
+    {label:'Fecha',value:model.fechaTexto},
+    {label:'Hora inicio',value:model.horaInicio},
+    {label:'Hora término',value:model.horaFin},
+    {label:'Duración total',value:model.duracion}
+  ];
+  var colW=layout.pageW/4;
+  metaCols.forEach(function(meta,idx){
+    var x=idx*colW;
+    if(idx>0){
+      doc.setDrawColor(116,0,0);
+      doc.setLineWidth(0.2);
+      doc.line(x,headH,x,headH+stripH);
+    }
+    doc.setFont('courier','normal');
+    doc.setFontSize(6.1);
+    doc.setTextColor(255,215,215);
+    doc.text(meta.label.toUpperCase(),x+layout.margin,headH+4.2);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8.6);
+    doc.setTextColor(255,245,245);
+    doc.text(safePdfText(meta.value,'No especificado'),x+layout.margin,headH+8.9);
+  });
+
+  return headH+stripH+7.5;
+}
+
+function buildGeneralInfo(doc,layout,y,model){
+  y=drawPdfSectionHeading(doc,layout,y,'01','Datos del servicio');
+  var colGap=5;
+  var colW=(layout.contentW-colGap)/2;
+  var fields=[
+    {label:'Cliente',value:model.cliente},
+    {label:'Sucursal',value:model.sucursal},
+    {label:'Gerente en turno',value:model.gerente},
+    {label:'Técnico responsable',value:model.tecnico},
+    {label:'Folio / Orden',value:model.folio},
+    {label:'Ubicación GPS',value:model.gps}
+  ];
+  for(var i=0;i<fields.length;i+=2){
+    y=ensurePdfSpace(doc,y,17.5,layout);
+    drawPdfFieldBox(doc,layout.margin,y,colW,fields[i].label,fields[i].value);
+    if(fields[i+1]){
+      drawPdfFieldBox(doc,layout.margin+colW+colGap,y,colW,fields[i+1].label,fields[i+1].value);
+    }
+    y+=17.3;
+  }
+  return y+1.5;
+}
+
+function buildFailureSection(doc,layout,y,model){
+  y=drawPdfSectionHeading(doc,layout,y,'02','Falla reportada');
+  return drawPdfTextBlock(doc,layout,y,'Descripción de la falla',model.falla,'critical');
+}
+
+function buildServiceSection(doc,layout,y,model){
+  y=drawPdfSectionHeading(doc,layout,y,'03','Servicio realizado');
+  y=drawPdfTextBlock(doc,layout,y,'Trabajos ejecutados',model.servicio,'service');
+  y=drawPdfTextBlock(doc,layout,y,'Materiales / refacciones utilizadas',model.materiales);
+  y=drawPdfTextBlock(doc,layout,y,'Observaciones',model.observaciones);
+  return y;
+}
+
+function buildCorrectivoGeneralInfo(doc,layout,y,model){
+  y=drawPdfSectionHeading(doc,layout,y,'01','Datos del servicio');
+  var colGap=5;
+  var colW=(layout.contentW-colGap)/2;
+  var fields=[
+    {label:'Gerente en turno',value:model.gerente},
+    {label:'Sucursal',value:model.sucursal},
+    {label:'Técnico responsable',value:model.tecnico},
+    {label:'Cliente',value:model.cliente}
+  ];
+  for(var i=0;i<fields.length;i+=2){
+    y=ensurePdfSpace(doc,y,19,layout);
+    drawPdfFieldBox(doc,layout.margin,y,colW,fields[i].label,fields[i].value);
+    if(fields[i+1]){
+      drawPdfFieldBox(doc,layout.margin+colW+colGap,y,colW,fields[i+1].label,fields[i+1].value);
+    }
+    y+=18.4;
+  }
+  return y+2.2;
+}
+
+function buildCorrectivoServiceSection(doc,layout,y,model){
+  y=drawPdfSectionHeading(doc,layout,y,'03','Servicio realizado');
+  return drawPdfTextBlock(doc,layout,y,'Detalle del servicio',model.servicio,'service');
+}
+
+function buildAdditionalResponsesSummary(sections){
+  var lines=[];
+  (Array.isArray(sections)?sections:[]).forEach(function(sec){
+    if(!sec) return;
+    if(sec.type==='multiple_choice'){
+      if(String(sec.value||'').trim()){
+        lines.push((sec.label||sec.title||'Pregunta')+': '+sec.value);
+      }
+      return;
+    }
+    if(sec.type==='fields'){
+      (sec.fields||[]).forEach(function(field){
+        if(String(field&&field.value||'').trim()){
+          lines.push((field.label||'Campo')+': '+field.value);
+        }
+      });
+      return;
+    }
+    if(sec.type==='textarea'){
+      if(String(sec.value||'').trim()){
+        lines.push((sec.title||'Texto')+': '+sec.value);
+      }
+      return;
+    }
+    if(sec.type==='checklist'){
+      var done=(sec.items||[]).filter(function(item){ return !!(item&&item.checked); }).length;
+      if((sec.items||[]).length){
+        lines.push((sec.title||'Checklist')+': '+done+' / '+(sec.items||[]).length+' realizado(s)');
+      }
+    }
+  });
+  return lines.join('\n');
+}
+
+function buildObservationsSection(doc,layout,y,model,sectionNumber,extraSummary){
+  y=drawPdfSectionHeading(doc,layout,y,sectionNumber||'05','Observaciones / recomendaciones finales');
+  var notes=safePdfText(model.observaciones,'No especificado');
+  if(String(extraSummary||'').trim()){
+    notes=notes==='No especificado' ? String(extraSummary).trim() : notes+'\n\n'+String(extraSummary).trim();
+  }
+  return drawPdfTextBlock(doc,layout,y,'Notas adicionales',notes);
+}
+
+function classifyFixedFieldKey(label){
+  var normalized=normalizeLookupLabel(label);
+  if(!normalized) return '';
+  if(normalized.indexOf('gerente')!==-1 || normalized.indexOf('encargado')!==-1) return 'gerente';
+  if(normalized.indexOf('tecnico')!==-1) return 'tecnico';
+  if(normalized.indexOf('cliente')!==-1) return 'cliente';
+  if(normalized.indexOf('sucursal')!==-1) return 'sucursal';
+  if(normalized.indexOf('folio')!==-1 || normalized.indexOf('orden')!==-1) return 'folio';
+  if(normalized.indexOf('fecha')!==-1) return 'fecha';
+  if(normalized.indexOf('hora')!==-1) return 'hora';
+  if(normalized.indexOf('dato')!==-1 || normalized.indexOf('informacion')!==-1) return 'datos';
+  if(normalized.indexOf('falla')!==-1 || normalized.indexOf('problema')!==-1 || normalized.indexOf('incidencia')!==-1) return 'falla';
+  if(normalized.indexOf('servicio')!==-1 || normalized.indexOf('trabajo')!==-1 || normalized.indexOf('accion')!==-1) return 'servicio';
+  if(normalized.indexOf('observacion')!==-1 || normalized.indexOf('comentario')!==-1 || normalized.indexOf('recomendacion')!==-1) return 'observaciones';
+  if(normalized.indexOf('firma gerente')!==-1 || normalized.indexOf('firma del gerente')!==-1) return 'firmaGerente';
+  if(normalized.indexOf('ubicacion')!==-1 || normalized.indexOf('maps')!==-1 || normalized.indexOf('coordenada')!==-1) return 'ubicacion';
+  return '';
+}
+
+function classifyFixedTextareaKey(title){
+  return classifyFixedFieldKey(title);
+}
+
+function isIgnorableCorrectivoText(value){
+  var key=classifyFixedFieldKey(value);
+  return !!key;
+}
+
+function extractAdditionalSectionsForCorrectivo(model){
+  var sections=Array.isArray(model && model.sections)?model.sections:[];
+  var additional=[];
+  sections.forEach(function(sec){
+    if(!sec || typeof sec!=='object') return;
+    if(sec.type==='fields'){
+      var fields=(Array.isArray(sec.fields)?sec.fields:[]).filter(function(field){
+        if(!field) return false;
+        var hasValue=String(field.value||'').trim();
+        if(!hasValue) return false;
+        return !isIgnorableCorrectivoText(field.label);
+      });
+      if(fields.length){
+        additional.push({
+          id:sec.id,
+          type:'fields',
+          title:sec.title,
+          fields:fields
+        });
+      }
+      return;
+    }
+    if(sec.type==='textarea'){
+      var value=String(sec.value||'').trim();
+      if(!value) return;
+      if(isIgnorableCorrectivoText(sec.title)) return;
+      additional.push(sec);
+      return;
+    }
+    if(sec.type==='checklist'){
+      if(isIgnorableCorrectivoText(sec.title)) return;
+      var items=(Array.isArray(sec.items)?sec.items:[]).filter(function(item){
+        if(!item) return false;
+        return !isIgnorableCorrectivoText(item.text);
+      });
+      if(!items.length) return;
+      additional.push({
+        id:sec.id,
+        type:'checklist',
+        title:sec.title,
+        items:items
+      });
+      return;
+    }
+    if(sec.type==='multiple_choice'){
+      if(isIgnorableCorrectivoText(sec.label||sec.title)) return;
+      if(!String(sec.value||'').trim()) return;
+      additional.push(sec);
+      return;
+    }
+    if(sec.type==='signature'){
+      return;
+    }
+    additional.push(sec);
+  });
+  return additional;
+}
+
+function buildCorrectivoAdditionalDataInline(doc,layout,y,sections){
+  if(!Array.isArray(sections) || !sections.length) return y;
+  y=ensurePdfSpace(doc,y,9,layout);
+  doc.setFont('courier','normal');
+  doc.setFontSize(6.9);
+  doc.setTextColor(138,138,133);
+  doc.text('DATOS ADICIONALES DEL CHECKLIST',layout.margin,y+2.8);
+  y+=5.5;
+  sections.forEach(function(sec){
+    if(sec.type==='fields'){
+      (sec.fields||[]).forEach(function(field){
+        y=ensurePdfSpace(doc,y,11,layout);
+        doc.setDrawColor(238,238,235);
+        doc.roundedRect(layout.margin,y,layout.contentW,10.2,1,1);
+        doc.setFont('courier','normal');
+        doc.setFontSize(6.2);
+        doc.setTextColor(138,138,133);
+        doc.text(safePdfText(field.label,'Campo'),layout.margin+2.2,y+3.4);
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(8.4);
+        doc.setTextColor(20,20,20);
+        var lines=doc.splitTextToSize(safePdfText(field.value,'No especificado'),layout.contentW-4.4);
+        doc.text(lines.slice(0,2),layout.margin+2.2,y+7.4);
+        y+=11.1;
+      });
+      return;
+    }
+    if(sec.type==='textarea'){
+      y=drawPdfTextBlock(doc,layout,y,safePdfText(sec.title,'Dato adicional'),safePdfText(sec.value,'No especificado'));
+      return;
+    }
+    if(sec.type==='checklist'){
+      var done=(sec.items||[]).filter(function(item){ return !!(item&&item.checked); }).length;
+      y=drawPdfTextBlock(
+        doc,
+        layout,
+        y,
+        safePdfText(sec.title,'Checklist adicional'),
+        'Actividades registradas: '+done+' de '+(sec.items||[]).length
+      );
+      return;
+    }
+  });
+  return y;
+}
+
+function buildLocationSection(doc,layout,y,model,sectionNumber){
+  y=drawPdfSectionHeading(doc,layout,y,sectionNumber||'07','Ubicación del servicio');
+  y=drawPdfTextBlock(doc,layout,y,'Coordenadas / precisión',model.gps);
+  if(!model.googleMapsUrl) return y;
+  y=ensurePdfSpace(doc,y,16,layout);
+  doc.setDrawColor(232,232,228);
+  doc.setFillColor(247,247,245);
+  doc.roundedRect(layout.margin,y,layout.contentW,13,1.2,1.2,'FD');
+  doc.setFont('courier','normal');
+  doc.setFontSize(6.6);
+  doc.setTextColor(138,138,133);
+  doc.text('MAPA / ENLACE',layout.margin+2.4,y+3.8);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(8.9);
+  doc.setTextColor(26,115,232);
+  var linkLabel='Abrir ubicación en Google Maps';
+  var linkX=layout.margin+2.4;
+  var linkY=y+8.4;
+  if(typeof doc.textWithLink==='function'){
+    doc.textWithLink(linkLabel,linkX,linkY,{url:model.googleMapsUrl});
+  }else{
+    doc.text(linkLabel,linkX,linkY);
+    if(typeof doc.link==='function'){
+      doc.link(linkX,linkY-3,doc.getTextWidth(linkLabel),4,{url:model.googleMapsUrl});
+    }
+  }
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(7.2);
+  doc.setTextColor(120,120,120);
+  var urlLines=doc.splitTextToSize(model.googleMapsUrl,layout.contentW-4.8);
+  doc.text(urlLines.slice(0,1),layout.margin+2.4,y+11.4);
+  return y+15.5;
+}
+
+function buildChecklistSections(doc,layout,y,model,options){
+  var opts=options||{};
+  var sectionNumber=opts.sectionNumber||'04';
+  var sectionTitle=opts.sectionTitle||'Checklist dinámico';
+  var emptyText=opts.emptyText||'Sin checklist registrado para este reporte.';
+  y=drawPdfSectionHeading(doc,layout,y,sectionNumber,sectionTitle);
+  if(!Array.isArray(model.sections) || !model.sections.length){
+    return drawPdfTextBlock(doc,layout,y,'Checklist',emptyText);
+  }
+  model.sections.forEach(function(sec,secIndex){
+    var sectionTitle=safePdfText(sec && sec.title ? sec.title : ('Sección '+(secIndex+1)),'Sección');
+    y=ensurePdfSpace(doc,y,10,layout);
+    doc.setFillColor(247,247,245);
+    doc.setDrawColor(238,238,235);
+    doc.roundedRect(layout.margin,y,layout.contentW,8,1.2,1.2,'FD');
+    doc.setFont('courier','normal');
+    doc.setFontSize(6.9);
+    doc.setTextColor(138,138,133);
+    doc.text(('SECCIÓN '+String(secIndex+1).padStart(2,'0')),layout.margin+2.2,y+3.4);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8.8);
+    doc.setTextColor(20,20,20);
+    doc.text(sectionTitle,layout.margin+2.2,y+6.5);
+    y+=9.3;
+
+    if(sec.type==='checklist'){
+      var items=Array.isArray(sec.items)?sec.items:[];
+      if(!items.length){
+        y=drawPdfTextBlock(doc,layout,y,'Actividades','Sin actividades registradas.');
+      }else{
+        items.forEach(function(item){
+          var activity=safePdfText((item && item.text)||'Actividad','Actividad');
+          var category=(item && item.cat)?(' · '+item.cat):'';
+          var state=resolveChecklistItemState(item||{});
+          var maxTextW=layout.contentW-42;
+          var lines=doc.splitTextToSize(activity+category,maxTextW);
+          var rowH=Math.max(8,(lines.length*3.8)+3.2);
+          y=ensurePdfSpace(doc,y,rowH+2,layout);
+          doc.setDrawColor(238,238,235);
+          doc.roundedRect(layout.margin,y,layout.contentW,rowH,1.1,1.1);
+          doc.setFont('helvetica','normal');
+          doc.setFontSize(8.6);
+          doc.setTextColor(30,30,30);
+          doc.text(lines,layout.margin+2.2,y+4.8);
+          doc.setFillColor(state.fill[0],state.fill[1],state.fill[2]);
+          doc.roundedRect(layout.pageW-layout.margin-30,y+1.5,27,rowH-3,1,1,'F');
+          doc.setFont('courier','bold');
+          doc.setFontSize(6.8);
+          doc.setTextColor(state.text[0],state.text[1],state.text[2]);
+          doc.text(state.label,layout.pageW-layout.margin-16.5,y+(rowH/2)+1,{align:'center'});
+          y+=rowH+1.2;
+        });
+      }
+      return;
+    }
+
+    if(sec.type==='fields'){
+      var fields=Array.isArray(sec.fields)?sec.fields:[];
+      if(!fields.length){
+        y=drawPdfTextBlock(doc,layout,y,'Campos','Sin campos registrados.');
+      }else{
+        fields.forEach(function(field){
+          y=ensurePdfSpace(doc,y,12.6,layout);
+          doc.setDrawColor(238,238,235);
+          doc.roundedRect(layout.margin,y,layout.contentW,11.3,1,1);
+          doc.setFont('courier','normal');
+          doc.setFontSize(6.5);
+          doc.setTextColor(138,138,133);
+          doc.text(safePdfText(field.label,'Campo'),layout.margin+2.3,y+3.5);
+          doc.setFont('helvetica','normal');
+          doc.setFontSize(8.9);
+          doc.setTextColor(20,20,20);
+          var fieldLines=doc.splitTextToSize(safePdfText(field.value,'No especificado'),layout.contentW-4.6);
+          doc.text(fieldLines.slice(0,2),layout.margin+2.3,y+8.2);
+          y+=12.2;
+        });
+      }
+      return;
+    }
+
+    if(sec.type==='textarea'){
+      y=drawPdfTextBlock(doc,layout,y,sectionTitle,safePdfText(sec.value,'No especificado'));
+      return;
+    }
+    if(sec.type==='multiple_choice'){
+      var question=safePdfText(sec.label||sec.title||'Opción múltiple','Opción múltiple');
+      var answer=safePdfText(sec.value,'Sin respuesta');
+      y=drawPdfTextBlock(doc,layout,y,question,answer);
+      return;
+    }
+    if(sec.type==='signature'){
+      return;
+    }
+
+    y=drawPdfTextBlock(doc,layout,y,sectionTitle,'Tipo de sección no reconocido. Se conservó la información base del checklist.');
+  });
+  return y+1;
+}
+
+function buildPhotoEvidence(doc,layout,y,model,options){
+  var opts=options||{};
+  y=drawPdfSectionHeading(doc,layout,y,opts.sectionNumber||'05',opts.sectionTitle||'Evidencia fotográfica');
+  if(!Array.isArray(model.photoSources) || !model.photoSources.length){
+    y=drawPdfTextBlock(doc,layout,y,'Evidencia','Sin evidencia fotográfica');
+    return y;
+  }
+  var total=model.photoSources.length;
+  var cols=total===1?1:2;
+  var gap=5;
+  var photoW=(layout.contentW-(gap*(cols-1)))/cols;
+  var photoH=cols===1?108:(total<=2?74:66);
+  model.photoSources.forEach(function(entry,idx){
+    if(idx%cols===0){
+      y=ensurePdfSpace(doc,y,photoH+8,layout);
+    }
+    var col=idx%cols;
+    var x=layout.margin+(col*(photoW+gap));
+    var rowY=y;
+    doc.setFillColor(247,247,245);
+    doc.setDrawColor(226,226,222);
+    doc.rect(x,rowY,photoW,photoH,'FD');
+    try{
+      var src=typeof entry==='string'?entry:String(entry&&entry.src||'');
+      var fmt=src.indexOf('data:image/png')===0?'PNG':'JPEG';
+      var originalW=Number(entry&&entry.width)||0;
+      var originalH=Number(entry&&entry.height)||0;
+      var fitBoxX=x+1.2;
+      var fitBoxY=rowY+1.2;
+      var fitBoxW=photoW-2.4;
+      var fitBoxH=photoH-7.2;
+      var drawW=fitBoxW;
+      var drawH=fitBoxH;
+      if(originalW>0 && originalH>0){
+        var ratio=Math.min(fitBoxW/originalW,fitBoxH/originalH);
+        drawW=Math.max(1,originalW*ratio);
+        drawH=Math.max(1,originalH*ratio);
+      }
+      var drawX=fitBoxX+((fitBoxW-drawW)/2);
+      var drawY=fitBoxY+((fitBoxH-drawH)/2);
+      doc.addImage(src,fmt,drawX,drawY,drawW,drawH,undefined,'FAST');
+    }catch(err){
+      console.warn('No se pudo renderizar evidencia en PDF:',err);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(7.8);
+      doc.setTextColor(138,138,133);
+      doc.text('Imagen no disponible',x+2,rowY+(photoH/2));
+    }
+    doc.setFillColor(20,20,20);
+    doc.rect(x,rowY+photoH-5,photoW,5,'F');
+    doc.setFont('courier','normal');
+    doc.setFontSize(6.2);
+    doc.setTextColor(235,235,235);
+    doc.text('EVIDENCIA '+String(idx+1).padStart(2,'0'),x+1.5,rowY+photoH-1.7);
+    if(col===cols-1 || idx===model.photoSources.length-1){
+      y=rowY+photoH+4;
+    }
+  });
+  doc.setFont('courier','normal');
+  doc.setFontSize(7);
+  doc.setTextColor(138,138,133);
+  doc.text(String(model.photoSources.length)+' fotografía(s) adjunta(s)',layout.pageW-layout.margin,y,{align:'right'});
+  return y+2;
+}
+
+function readPngDimensionsFromDataUrl(dataUrl){
+  var src=String(dataUrl||'').trim();
+  if(src.indexOf('data:image/png;base64,')!==0) return {width:0,height:0};
+  try{
+    var base64=src.split(',')[1]||'';
+    if(!base64) return {width:0,height:0};
+    var bytes=atob(base64.slice(0,96));
+    if(bytes.length<24) bytes=atob(base64);
+    if(bytes.length<24) return {width:0,height:0};
+    var width=((bytes.charCodeAt(16)&255)*16777216)+((bytes.charCodeAt(17)&255)*65536)+((bytes.charCodeAt(18)&255)*256)+(bytes.charCodeAt(19)&255);
+    var height=((bytes.charCodeAt(20)&255)*16777216)+((bytes.charCodeAt(21)&255)*65536)+((bytes.charCodeAt(22)&255)*256)+(bytes.charCodeAt(23)&255);
+    if(width>0 && height>0) return {width:width,height:height};
+  }catch(_err){}
+  return {width:0,height:0};
+}
+
+function drawPdfSignatureImageContain(doc,sigData,format,x,y,w,h){
+  var src=String(sigData||'').trim();
+  if(!src) return false;
+  var dims=readPngDimensionsFromDataUrl(src);
+  var drawW=w;
+  var drawH=h;
+  if(dims.width>0 && dims.height>0){
+    var ratio=Math.min(w/dims.width,h/dims.height);
+    drawW=Math.max(1,dims.width*ratio);
+    drawH=Math.max(1,dims.height*ratio);
+  }else{
+    var fallbackRatio=3.4;
+    drawW=Math.min(w,h*fallbackRatio);
+    drawH=Math.max(1,drawW/fallbackRatio);
+    if(drawH>h){
+      drawH=h;
+      drawW=Math.max(1,drawH*fallbackRatio);
+    }
+  }
+  var drawX=x+((w-drawW)/2);
+  var drawY=y+((h-drawH)/2);
+  doc.addImage(src,format,drawX,drawY,drawW,drawH,undefined,'FAST');
+  return true;
+}
+
+function buildSignatures(doc,layout,y,model,options){
+  var opts=options||{};
+  y=drawPdfSectionHeading(doc,layout,y,opts.sectionNumber||'06',opts.sectionTitle||'Firmas de conformidad');
+  y=ensurePdfSpace(doc,y,49,layout);
+  var gap=6;
+  var colW=(layout.contentW-gap)/2;
+  var boxH=28;
+  var drawSignature=function(sigData,x,label,name,role){
+    doc.setDrawColor(226,226,222);
+    doc.setFillColor(247,247,245);
+    doc.roundedRect(x,y,colW,boxH,1.2,1.2,'FD');
+    doc.setFont('courier','normal');
+    doc.setFontSize(6.6);
+    doc.setTextColor(138,138,133);
+    doc.text(label.toUpperCase(),x+2,y+3.8);
+    if(sigData){
+      try{
+        var sigFmt=String(sigData).indexOf('data:image/jpeg')===0?'JPEG':'PNG';
+        drawPdfSignatureImageContain(doc,sigData,sigFmt,x+2,y+5,colW-4,13);
+      }catch(err){
+        console.warn('No se pudo agregar firma al PDF:',err);
+      }
+    }else{
+      doc.setDrawColor(210,210,205);
+      doc.line(x+2,y+18.5,x+colW-2,y+18.5);
+      doc.setFont('helvetica','italic');
+      doc.setFontSize(8.2);
+      doc.setTextColor(170,170,165);
+      doc.text('Sin firma capturada',x+(colW/2),y+15,{align:'center'});
+    }
+    doc.setDrawColor(200,200,194);
+    doc.line(x+2,y+22,x+colW-2,y+22);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(20,20,20);
+    doc.text(name,x+(colW/2),y+25.4,{align:'center'});
+    doc.setFont('courier','normal');
+    doc.setFontSize(6.4);
+    doc.setTextColor(138,138,133);
+    doc.text(role,x+(colW/2),y+28,{align:'center'});
+  };
+  drawSignature(model.signatureTecnico,layout.margin,'Firma del técnico',model.tecnico,'Técnico · BRISAM');
+  drawSignature(model.signatureGerente,layout.margin+colW+gap,'Firma del gerente en turno',model.gerente,'Gerente · '+model.cliente);
+  y+=boxH+4;
+
+  var extras=(Array.isArray(model.dynamicSignatures)?model.dynamicSignatures:[]).filter(function(sig){
+    if(!sig || !sig.value) return false;
+    var lbl=normalizeLookupLabel(sig.label||'');
+    if(model.signatureTecnico && (sig.value===model.signatureTecnico || lbl.indexOf('tecnico')!==-1)) return false;
+    if(model.signatureGerente && (sig.value===model.signatureGerente || lbl.indexOf('gerente')!==-1)) return false;
+    return true;
+  });
+  if(extras.length){
+    y=ensurePdfSpace(doc,y,12,layout);
+    doc.setFont('courier','normal');
+    doc.setFontSize(6.8);
+    doc.setTextColor(138,138,133);
+    doc.text('FIRMAS ADICIONALES',layout.margin,y+2.8);
+    y+=5.2;
+    var exCols=2;
+    var exGap=6;
+    var exColW=(layout.contentW-exGap)/exCols;
+    var exBoxH=24;
+    extras.forEach(function(sig,idx){
+      if(idx%exCols===0){
+        y=ensurePdfSpace(doc,y,exBoxH+6,layout);
+      }
+      var col=idx%exCols;
+      var x=layout.margin+(col*(exColW+exGap));
+      var rowY=y;
+      doc.setDrawColor(226,226,222);
+      doc.setFillColor(247,247,245);
+      doc.roundedRect(x,rowY,exColW,exBoxH,1.2,1.2,'FD');
+      doc.setFont('courier','normal');
+      doc.setFontSize(6.2);
+      doc.setTextColor(138,138,133);
+      doc.text(safePdfText(sig.label,'Firma').toUpperCase(),x+2,rowY+3.4);
+      try{
+        var exFmt=String(sig.value).indexOf('data:image/jpeg')===0?'JPEG':'PNG';
+        drawPdfSignatureImageContain(doc,sig.value,exFmt,x+2,rowY+5,exColW-4,13);
+      }catch(_err){
+        doc.setDrawColor(210,210,205);
+        doc.line(x+2,rowY+17,x+exColW-2,rowY+17);
+      }
+      if(col===exCols-1 || idx===extras.length-1){
+        y=rowY+exBoxH+3;
+      }
+    });
+  }
+
+  y=drawPdfTextBlock(
+    doc,
+    layout,
+    y,
+    'Nota legal',
+    'Al firmar este documento se confirma que los trabajos descritos fueron realizados y entregados en condiciones operativas.',
+    null
+  );
+  return y;
+}
+
+function buildFooter(doc,layout,model){
+  var total=doc.getNumberOfPages();
+  for(var i=1;i<=total;i++){
+    doc.setPage(i);
+    var footerY=layout.pageH-layout.footerH;
+    doc.setFillColor(209,0,0);
+    doc.rect(0,footerY,layout.pageW,layout.footerH,'F');
+    doc.setFont('courier','bold');
+    doc.setFontSize(7.2);
+    doc.setTextColor(255,255,255);
+    doc.text('BRISAM · Servicios Integrales',layout.margin,footerY+4.8);
+    doc.setFont('courier','normal');
+    doc.setFontSize(6.4);
+    doc.setTextColor(255,230,230);
+    doc.text('RFC AEDB020529V33 · brisam.mx@gmail.com',layout.margin,footerY+8.8);
+    doc.text('Folio RST-'+model.folio+' · Página '+i+'/'+total,layout.pageW-layout.margin,footerY+8.8,{align:'right'});
+  }
+}
+
+function formatPdfSectionNumber(value){
+  return String(value).padStart(2,'0');
+}
+
+function createPdfLayout(doc){
+  var layout={
+    pageW:doc.internal.pageSize.getWidth(),
+    pageH:doc.internal.pageSize.getHeight(),
+    margin:12,
+    top:14,
+    footerH:12
+  };
+  layout.contentW=layout.pageW-(layout.margin*2);
+  return layout;
+}
+
+function storeGeneratedPdf(doc,model){
+  var blob=doc.output('blob');
+  if(lastGeneratedPdfUrl){ URL.revokeObjectURL(lastGeneratedPdfUrl); }
+  lastGeneratedPdfUrl=URL.createObjectURL(blob);
+  lastGeneratedPdfName='Reporte-BRISAM-'+model.folio+'-'+fileSafeStamp(model.generatedAt)+'.pdf';
+  return {url:lastGeneratedPdfUrl,name:lastGeneratedPdfName};
+}
+
+async function generateGenericPdf(reportData){
+  var JsPdf=getJsPdfCtor();
+  if(!JsPdf) throw new Error('jsPDF no está disponible');
+
+  var model=buildPdfReportModel(reportData||{});
+  model.brandLogo=await getPdfBrandLogoAsset();
+  model.photoSources=await resolvePdfPhotos(model.photos);
+
+  var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
+  var layout=createPdfLayout(doc);
+
+  var y=buildPdfHeader(doc,layout,model);
+  y=buildGeneralInfo(doc,layout,y,model);
+  y=buildFailureSection(doc,layout,y,model);
+  y=buildServiceSection(doc,layout,y,model);
+  y=buildChecklistSections(doc,layout,y,model);
+  y=buildPhotoEvidence(doc,layout,y,model);
+  y=buildSignatures(doc,layout,y,model);
+
+  buildFooter(doc,layout,model);
+  return storeGeneratedPdf(doc,model);
+}
+
+async function generateCorrectivoPdf(reportData){
+  var JsPdf=getJsPdfCtor();
+  if(!JsPdf) throw new Error('jsPDF no está disponible');
+
+  var model=buildPdfReportModel(reportData||{});
+  model.brandLogo=await getPdfBrandLogoAsset();
+  model.photoSources=await resolvePdfPhotos(model.photos);
+  var correctivoExtraSummary=buildAdditionalResponsesSummary(extractAdditionalSectionsForCorrectivo(model));
+
+  var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
+  var layout=createPdfLayout(doc);
+  var y=buildPdfHeader(doc,layout,model);
+  y=buildCorrectivoGeneralInfo(doc,layout,y,model);
+  y+=1.8;
+  y=buildFailureSection(doc,layout,y,model);
+  y+=1.8;
+  y=buildCorrectivoServiceSection(doc,layout,y,model);
+  y+=1.8;
+  y=buildPhotoEvidence(doc,layout,y,model,{sectionNumber:'04'});
+  y+=1.8;
+  y=buildObservationsSection(doc,layout,y,model,'05',correctivoExtraSummary);
+  y+=1.8;
+  y=buildSignatures(doc,layout,y,model,{sectionNumber:'06'});
+  y+=1.8;
+  y=buildLocationSection(doc,layout,y,model,'07');
+
+  buildFooter(doc,layout,model);
+  return storeGeneratedPdf(doc,model);
+}
+
+async function generateBrisamServicePdf(reportData){
+  var model=buildPdfReportModel(reportData||{});
+  if(model.templateType==='correctivo'){
+    return generateCorrectivoPdf(reportData||{});
+  }
+  return generateGenericPdf(reportData||{});
+}
+
+async function createAndStoreReportPdf(pdfData){
+  return generateBrisamServicePdf(pdfData||{});
+}
+
+function downloadLastReportPdf(){
+  if(!lastGeneratedPdfUrl){ toast('⚠️ No hay PDF generado todavía'); return; }
+  var a=document.createElement('a');
+  a.href=lastGeneratedPdfUrl;
+  a.download=lastGeneratedPdfName||'reporte.pdf';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function viewLastReportPdf(){
+  if(!lastGeneratedPdfUrl){ toast('⚠️ No hay PDF generado todavía'); return; }
+  window.open(lastGeneratedPdfUrl,'_blank','noopener');
+}
+
+function resetPhotoSlots(){
+  pendingPhotos=[null,null,null];
+  selectedPhotoSlot=null;
+  document.querySelectorAll('.ph-slot').forEach(function(s){
+    s.classList.remove('filled');
+    s.innerHTML='<span style="font-size:20px;">📷</span><span>Foto</span>';
+  });
+}
+
+function addPhoto(slot,slotIndex){
+  if(slotIndex<0 || slotIndex>2) return;
+  selectedPhotoSlot={el:slot,index:slotIndex};
+  var input=document.getElementById('ph-file');
+  if(!input) return;
+  input.click();
+}
+
+function handlePhotoPicked(ev){
+  var file=ev.target.files && ev.target.files[0];
+  if(!file || !selectedPhotoSlot) return;
+  if(file.type.indexOf('image/')!==0){ toast('⚠️ Selecciona una imagen válida'); ev.target.value=''; return; }
+
+  var idx=selectedPhotoSlot.index;
+  var slot=selectedPhotoSlot.el;
+  pendingPhotos[idx]={file:file,url:''};
+
+  var reader=new FileReader();
+  reader.onload=function(e){
+    slot.classList.add('filled');
+    slot.innerHTML='<img src="'+e.target.result+'" alt="">';
+  };
+  reader.readAsDataURL(file);
+  toast('📷 Foto seleccionada');
+  ev.target.value='';
+}
+
+function bindPhotoInput(){
+  var input=document.getElementById('ph-file');
+  if(!input) return;
+  input.removeEventListener('change',handlePhotoPicked);
+  input.addEventListener('change',handlePhotoPicked);
+}
+
+async function uploadPendingPhotos(orderId){
+  var filesToUpload=pendingPhotos
+    .map(function(p,idx){ return p && p.file ? {slotIndex:idx,file:p.file} : null; })
+    .filter(function(p){ return !!p; });
+
+  if(!filesToUpload.length) return [];
+
+  if(typeof window.uploadEvidenceImage!=='function'){
+    throw new Error('Uploader de Storage no disponible');
+  }
+
+  console.log('[closeOrder] Iniciando subida de imágenes. Total:',filesToUpload.length);
+  var uploadedUrls=await Promise.all(filesToUpload.map(async function(item){
+    console.log('[closeOrder] Subiendo imagen slot',item.slotIndex,'nombre:',item.file && item.file.name ? item.file.name : 'sin-nombre');
+    var url=await withTimeout(
+      window.uploadEvidenceImage(item.file,{orderId:orderId,slotIndex:item.slotIndex}),
+      60000,
+      'Subida de imagen'
+    );
+    console.log('[closeOrder] Imagen subida slot',item.slotIndex,'url:',url);
+    pendingPhotos[item.slotIndex].url=url;
+    return url;
+  }));
+  console.log('[closeOrder] Subida de imágenes completada. URLs:',uploadedUrls.length);
+
+  return uploadedUrls;
+}
 
 function initSig(){
-  var c=document.getElementById('sig-c'),ctx=c.getContext('2d');
-  ctx.strokeStyle='#f97316';ctx.lineWidth=2;ctx.lineCap='round';ctx.lineJoin='round';
-  function pos(e){ var r=c.getBoundingClientRect(),s=e.touches?e.touches[0]:e; return{x:(s.clientX-r.left)*(c.width/r.width),y:(s.clientY-r.top)*(c.height/r.height)}; }
-  c.addEventListener('mousedown',function(e){sigDraw=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
-  c.addEventListener('mousemove',function(e){if(!sigDraw)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();markSig();});
-  c.addEventListener('mouseup',function(){sigDraw=false;});
-  c.addEventListener('mouseleave',function(){sigDraw=false;});
-  c.addEventListener('touchstart',function(e){e.preventDefault();sigDraw=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
-  c.addEventListener('touchmove',function(e){e.preventDefault();if(!sigDraw)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();markSig();},{passive:false});
-  c.addEventListener('touchend',function(){sigDraw=false;});
+  fixedSignatureData='';
+  sigSigned=false;
+  updateFixedSignatureUi();
 }
-function markSig(){ sigSigned=true; document.getElementById('sig-c').classList.add('signed'); document.getElementById('sig-st').textContent='✓ Firmado'; }
-function clearSig(){ var c=document.getElementById('sig-c'); c.getContext('2d').clearRect(0,0,c.width,c.height); sigSigned=false; c.classList.remove('signed'); document.getElementById('sig-st').textContent='Sin firmar'; }
 
-function closeOrder(){
+function collectChecklistReportData(ck,total,done){
+  var respuestas={sections:[]},obs=[];
+
+  if(ck){
+    ck.sections.forEach(function(sec,si){
+      if(sec.type==='checklist'){
+        var items=sec.items.map(function(item,ii){
+          var key='s'+si+'i'+ii;
+          return {id:item.id,text:item.text,cat:item.cat,checked:!!chkState[key]};
+        });
+        respuestas.sections.push({id:sec.id,type:'checklist',title:sec.title,items:items});
+      }
+      if(sec.type==='fields'){
+        var fields=sec.fields.map(function(f){
+          var el=document.getElementById('df-'+f.id);
+          return {id:f.id,label:f.label,inputType:f.inputType,value:el?el.value:''};
+        });
+        respuestas.sections.push({id:sec.id,type:'fields',title:sec.title,fields:fields});
+      }
+      if(sec.type==='textarea'){
+        var ta=document.getElementById('dta-'+sec.id);
+        var text=ta?ta.value:'';
+        respuestas.sections.push({id:sec.id,type:'textarea',title:sec.title,value:text});
+        if(text) obs.push(sec.title+': '+text);
+      }
+      if(sec.type==='multiple_choice'){
+        var secKey=normalizeSectionDomKey(sec.id||('mc-'+si));
+        var selected=document.querySelector('input[name="mc-'+secKey+'"]:checked');
+        var value=selected?selected.value:'';
+        respuestas.sections.push({
+          id:sec.id,
+          type:'multiple_choice',
+          title:sec.title||'Opción múltiple',
+          label:sec.label||sec.title||'Pregunta',
+          required:sec.required===true,
+          options:Array.isArray(sec.options)?sec.options:[],
+          value:value
+        });
+      }
+      if(sec.type==='signature'){
+        var sigKey=normalizeSectionDomKey(sec.id||('sig-'+si));
+        var state=dynamicSignatureState[sigKey]||{signed:false,value:''};
+        respuestas.sections.push({
+          id:sec.id,
+          type:'signature',
+          title:sec.title||'Firma',
+          label:sec.label||sec.title||'Firma',
+          required:sec.required===true,
+          value:state.value||''
+        });
+      }
+    });
+  } else {
+    respuestas.sections.push({
+      id:'fallback',
+      type:'checklist',
+      title:'Actividades',
+      items:[{id:'s0i0',text:'Revisión general',cat:'General',checked:!!chkState['s0i0']}]
+    });
+  }
+
+  respuestas.progreso={total:total,completadas:done,porcentaje:total?Math.round(done/total*100):0};
+  return {respuestas:respuestas,observaciones:obs.join('\n\n')};
+}
+
+function findChecklistAnswerValue(respuestas,keywords){
+  var sections=(respuestas && Array.isArray(respuestas.sections))?respuestas.sections:[];
+  var terms=(keywords||[]).map(normalizeLookupLabel);
+  function hasKeyword(label){
+    var normalized=normalizeLookupLabel(label);
+    return terms.some(function(term){ return normalized.indexOf(term)!==-1; });
+  }
+  for(var i=0;i<sections.length;i++){
+    var sec=sections[i]||{};
+    if(sec.type==='fields'){
+      var fields=Array.isArray(sec.fields)?sec.fields:[];
+      for(var j=0;j<fields.length;j++){
+        var field=fields[j]||{};
+        if(hasKeyword(field.label) && String(field.value||'').trim()){
+          return String(field.value||'').trim();
+        }
+      }
+    }
+    if(sec.type==='textarea'){
+      if(hasKeyword(sec.title) && String(sec.value||'').trim()){
+        return String(sec.value||'').trim();
+      }
+    }
+    if(sec.type==='multiple_choice'){
+      var mcLabel=sec.label||sec.title||'';
+      if(hasKeyword(mcLabel) && String(sec.value||'').trim()){
+        return String(sec.value||'').trim();
+      }
+    }
+    if(sec.type==='signature'){
+      var sigLabel=sec.label||sec.title||'';
+      if(hasKeyword(sigLabel) && String(sec.value||'').trim()){
+        return String(sec.value||'').trim();
+      }
+    }
+  }
+  return '';
+}
+
+function extractBrisamReportMeta(respuestas,defaultObservaciones){
+  var explicitObservaciones=findChecklistAnswerValue(
+    respuestas,
+    [
+      'observaciones',
+      'observaciones finales',
+      'notas adicionales',
+      'notas finales',
+      'recomendaciones',
+      'recomendaciones finales',
+      'comentarios finales'
+    ]
+  );
+  return {
+    gerente:findChecklistAnswerValue(respuestas,['gerente','encargado']),
+    cliente:findChecklistAnswerValue(respuestas,['cliente']),
+    sucursal:findChecklistAnswerValue(respuestas,['sucursal']),
+    falla:findChecklistAnswerValue(respuestas,['falla','problema reportado','incidencia']),
+    servicio:findChecklistAnswerValue(respuestas,['servicio realizado','trabajos ejecutados','acciones realizadas','actividad realizada']),
+    materiales:findChecklistAnswerValue(respuestas,['material','refaccion','insumo']),
+    observaciones:String(explicitObservaciones||'').trim(),
+    firmaGerente:findChecklistAnswerValue(respuestas,['firma gerente','firma del gerente'])
+  };
+}
+
+function validateRequiredChecklistSections(ck,respuestas){
+  var errors=[];
+  if(!ck || !Array.isArray(ck.sections)) return errors;
+  var answeredById={};
+  var answered=(respuestas && Array.isArray(respuestas.sections))?respuestas.sections:[];
+  answered.forEach(function(sec){ answeredById[String(sec.id||'')]=sec; });
+  ck.sections.forEach(function(sec){
+    if(!sec || !sec.type) return;
+    var answer=answeredById[String(sec.id||'')]||{};
+    if(sec.type==='multiple_choice' && sec.required===true){
+      if(!String(answer.value||'').trim()){
+        errors.push('Responde la opción obligatoria: '+(sec.label||sec.title||'Pregunta'));
+      }
+    }
+    if(sec.type==='signature' && sec.required===true){
+      if(!String(answer.value||'').trim()){
+        errors.push('Se requiere firma en: '+(sec.label||sec.title||'Firma'));
+      }
+    }
+    if(sec.type==='textarea' && sec.required===true){
+      if(!String(answer.value||'').trim()){
+        errors.push('Completa el campo obligatorio: '+(sec.title||'Texto'));
+      }
+    }
+    if(sec.type==='fields'){
+      var requiredFields=(sec.fields||[]).filter(function(f){ return f && f.required===true; });
+      requiredFields.forEach(function(field){
+        var fieldAnswer=((answer.fields||[]).find(function(a){ return a.id===field.id; })||{}).value;
+        if(!String(fieldAnswer||'').trim()){
+          errors.push('Completa el campo obligatorio: '+(field.label||'Campo'));
+        }
+      });
+    }
+  });
+  return errors;
+}
+
+async function closeOrder(){
+  if(closingOrderInProgress){ return; }
   var keys=Object.keys(chkState),total=keys.length,done=keys.filter(function(k){return chkState[k];}).length;
   if(done<Math.ceil(total*0.5)){toast('⚠️ Completa al menos el 50% del check-list');return;}
   if(!sigSigned){toast('✏️ Se requiere la firma del responsable');return;}
-  var o=null; for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===curOrderId){o=DB.orders[i];break;}
-  if(!o)return;
-  o.status='done';
-  document.getElementById('wd-wrap').style.display='none';
-  buildReport(o);
-  goTo('report',document.getElementById('ni-report'));
-  renderTechView(); renderDashboard();
-  toast('✅ Reporte generado exitosamente');
+  var isFree=currentWorkMode==='free';
+  var o=null;
+  var ck=null;
+  var tc=null;
+  var cl=null;
+  var br=null;
+  var generatedFolio=isFree?('CHK-'+String(Date.now()).slice(-8)):'';
+  if(isFree){
+    ck=gCl(currentFreeChecklistId);
+    if(!ck){ toast('⚠️ Checklist libre no encontrado'); return; }
+    var sel=document.getElementById('tv-sel');
+    tc=sel?gTech(sel.value):null;
+  }else{
+    for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===curOrderId){o=DB.orders[i];break;}
+    if(!o) return;
+    ck=gCl(o.clId);
+    tc=gTech(o.techId);
+    cl=gClient(o.clientId);
+    br=gBranch(o.branchId);
+  }
+
+  var closeBtn=document.querySelector('#wd-wrap .btn.btn-success');
+  var captured=collectChecklistReportData(ck,total,done);
+  var requiredErrors=validateRequiredChecklistSections(ck,captured.respuestas);
+  if(requiredErrors.length){
+    toast('⚠️ '+requiredErrors[0]);
+    return;
+  }
+  closingOrderInProgress=true;
+  if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
+  var reportMeta=extractBrisamReportMeta(captured.respuestas,captured.observaciones||(!isFree&&o?o.desc:''));
+  var signatureData=String(fixedSignatureData||'').trim();
+  var reportFolio=isFree?generatedFolio:o.id;
+  var checklistTemplateType=resolvePdfTemplateType({
+    templateType:ck&&ck.templateType,
+    checklistNombre:ck&&ck.name,
+    checklistType:ck&&ck.type,
+    tipoMantenimiento:!isFree&&o?o.type:''
+  });
+  var isCorrectivoTemplate=checklistTemplateType==='correctivo';
+  var finalObservaciones=isCorrectivoTemplate
+    ? (reportMeta.observaciones||'')
+    : (reportMeta.observaciones||captured.observaciones||(!isFree&&o?o.desc:'')||'');
+  var finalServicio=reportMeta.servicio||(!isFree&&o?o.desc:'');
+  try{
+    var locationData=await getTabletLocationForReport();
+    if(!locationData || typeof locationData.lat!=='number' || typeof locationData.lng!=='number'){
+      throw new Error('No se pudo capturar ubicación GPS');
+    }
+
+    var imagenes=pendingPhotos
+      .map(function(p,idx){ return p && p.file ? {slotIndex:idx,file:p.file} : null; })
+      .filter(function(p){ return !!p; });
+    if(imagenes.length && typeof window.uploadEvidenceImage!=='function'){
+      throw new Error('uploadEvidenceImage no está disponible');
+    }
+
+    console.log('[closeOrder] Inicio de subida. Imágenes:',imagenes.length);
+    var urls=await Promise.all(imagenes.map(async function(img){
+      var uploadOrderId=isFree?generatedFolio:o.id;
+      var url=await window.uploadEvidenceImage(img.file,{orderId:uploadOrderId,slotIndex:img.slotIndex});
+      if(pendingPhotos[img.slotIndex]) pendingPhotos[img.slotIndex].url=url;
+      console.log('[closeOrder] Imagen subida slot',img.slotIndex,'url:',url);
+      return url;
+    }));
+    console.log('[closeOrder] Fin de subida. URLs:',urls.length);
+
+    if(isFree){
+      if(typeof window.saveChecklistReportToFirestore!=='function'){
+        throw new Error('saveChecklistReportToFirestore no está disponible');
+      }
+      console.log('[closeOrder] Guardando checklist libre en Firestore');
+      await window.saveChecklistReportToFirestore({
+        checklistId:ck.id,
+        checklistName:ck.name,
+        checklistType:ck.type||'',
+        templateType:checklistTemplateType,
+        folio:reportFolio,
+        technicianName:tc?tc.name:'',
+        managerName:reportMeta.gerente||'',
+        answers:captured.respuestas,
+        observaciones:finalObservaciones,
+        fallaReportada:reportMeta.falla||'',
+        servicioRealizado:finalServicio||'',
+        photos:urls,
+        location:{
+          lat:locationData.lat,
+          lng:locationData.lng,
+          accuracy:locationData.accuracy||0,
+          direccionAprox:locationData.address||'',
+          capturedAt:locationData.capturedAt||new Date().toISOString(),
+          source:'navigator.geolocation'
+        },
+        signatureData:signatureData,
+        managerSignatureData:reportMeta.firmaGerente||''
+      });
+      console.log('[closeOrder] Checklist libre guardado correctamente');
+    }else{
+      if(typeof window.saveReportToFirestore!=='function'){
+        throw new Error('saveReportToFirestore no está disponible');
+      }
+      var reportData={
+        ordenId:reportFolio,
+        folio:reportFolio,
+        tecnicoId:o.techId,
+        tecnicoNombre:tc?tc.name:'',
+        clienteNombre:cl?cl.name:(reportMeta.cliente||''),
+        sucursalNombre:br?br.name:(reportMeta.sucursal||''),
+        gerenteTurno:reportMeta.gerente||'',
+        checklist:{id:o.clId,name:ck?ck.name:'—'},
+        checklistNombre:ck?ck.name:'—',
+        checklistType:ck?ck.type:'',
+        templateType:checklistTemplateType,
+        tipoMantenimiento:o.type||'',
+        fallaReportada:reportMeta.falla||'',
+        servicioRealizado:finalServicio||'',
+        materiales:reportMeta.materiales||'',
+        respuestas:captured.respuestas,
+        observaciones:finalObservaciones,
+        firmaTecnico:signatureData,
+        firmaGerente:reportMeta.firmaGerente||'',
+        fotos:urls,
+        ubicacion:{
+          lat:locationData.lat,
+          lng:locationData.lng,
+          accuracy:locationData.accuracy||0,
+          direccionAprox:locationData.address||'',
+          capturedAt:locationData.capturedAt||new Date().toISOString(),
+          source:'navigator.geolocation'
+        }
+      };
+      console.log('[closeOrder] Antes de guardar reporte');
+      await window.saveReportToFirestore(reportData);
+      console.log('[closeOrder] Reporte guardado correctamente');
+    }
+
+    // Generación automática de PDF al cerrar orden.
+    try{
+      var photoPreviews=Array.prototype.slice.call(document.querySelectorAll('.ph-slot.filled img'))
+        .map(function(img){ return img && img.getAttribute('src') ? img.getAttribute('src') : ''; })
+        .filter(function(src){ return !!src; });
+      var pdfInfo=await generateBrisamServicePdf({
+        ordenId:reportFolio,
+        folio:reportFolio,
+        fecha:new Date(),
+        fechaTexto:new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'}),
+        tecnicoNombre:tc?tc.name:'',
+        gerenteTurno:reportMeta.gerente||'',
+        clienteNombre:isFree?(reportMeta.cliente||'Checklist libre'):(cl?cl.name:(reportMeta.cliente||'No especificado')),
+        sucursalNombre:isFree?(reportMeta.sucursal||'No especificado'):(br?br.name:(reportMeta.sucursal||'No especificado')),
+        tipoMantenimiento:isFree?('Checklist libre · '+(ck?ck.type:'General')):(o.type||'—'),
+        checklistNombre:ck?ck.name:'—',
+        checklistType:ck?ck.type:'',
+        templateType:checklistTemplateType,
+        fallaReportada:reportMeta.falla||'',
+        servicioRealizado:finalServicio||'',
+        materiales:reportMeta.materiales||'',
+        observaciones:finalObservaciones,
+        respuestas:captured.respuestas,
+        photoPreviews:photoPreviews,
+        fotos:urls,
+        signatureData:signatureData,
+        firmaTecnico:signatureData,
+        firmaGerente:reportMeta.firmaGerente||'',
+        ubicacion:{
+          lat:locationData.lat,
+          lng:locationData.lng,
+          accuracy:locationData.accuracy||0,
+          direccionAprox:locationData.address||'',
+          capturedAt:locationData.capturedAt||new Date().toISOString()
+        }
+      });
+      console.log('[closeOrder] PDF generado:',pdfInfo.name);
+      downloadLastReportPdf();
+    }catch(pdfErr){
+      console.error('Error generando PDF automático:',pdfErr);
+      toast('⚠️ Reporte guardado, pero no se pudo generar el PDF');
+    }
+
+    var reportOrder=isFree
+      ? {id:generatedFolio,type:'Checklist libre',clientId:'',branchId:'',techId:tc?tc.id:'',clId:ck?ck.id:'',desc:captured.observaciones||''}
+      : o;
+    if(!isFree){
+      o.status='done';
+    }else{
+      currentWorkMode='order';
+      currentFreeChecklistId='';
+      renderTechChecklistPage();
+    }
+    curOrderId=null;
+    notifyLiveTrackingContext();
+    document.getElementById('wd-wrap').style.display='none';
+    buildReport(reportOrder,locationData);
+    goTo('report',document.getElementById('ni-report'));
+    renderTechView(); renderDashboard();
+    toast(isFree?'✅ Checklist guardado y reporte generado':'✅ Reporte generado y guardado');
+    }catch(err){
+      console.error('Error en cierre de orden:',err);
+      var emsg=String((err&&err.message)||'');
+      if(emsg.indexOf('ubicación GPS')!==-1){
+        toast('⚠️ Activa la ubicación exacta para cerrar la orden');
+      }else{
+        toast('❌ No se pudo guardar. Revisa la subida de imágenes e intenta nuevamente.');
+      }
+  }finally{
+    closingOrderInProgress=false;
+    if(closeBtn){ closeBtn.disabled=false; closeBtn.style.opacity=''; }
+    setWorkModeButtonLabel();
+  }
 }
 
-function buildReport(o){
+function buildReport(o,locationData){
   var cl=gClient(o.clientId),br=gBranch(o.branchId),tc=gTech(o.techId),ck=gCl(o.clId);
   var now=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  var locLabel=(locationData && typeof locationData.lat==='number' && typeof locationData.lng==='number')
+    ? (locationData.lat.toFixed(5)+', '+locationData.lng.toFixed(5)+(locationData.accuracy?(' ('+locationData.accuracy+'m)'):''))
+    : 'Sin ubicación';
 
   // Build dynamic sections for report
   var dynReport='';
@@ -1080,12 +4622,15 @@ function buildReport(o){
   var photos='';
   document.querySelectorAll('.ph-slot.filled').forEach(function(s){ photos+='<div class="rphoto">'+s.innerHTML+'</div>'; });
   if(!photos) photos='<div style="color:#9ca3af;font-size:11px;padding:6px;">Sin fotos adjuntas</div>';
-  var sigData=document.getElementById('sig-c').toDataURL();
+  var sigData=String(fixedSignatureData||'').trim();
+  var sigPreviewHtml=sigData
+    ? '<img src="'+sigData+'" style="height:55px;max-width:100%;">'
+    : '<div style="height:55px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px;">Sin firma</div>';
 
   document.getElementById('rpt-content').innerHTML=
     '<div style="display:flex;gap:10px;margin-bottom:16px;">'
-    +'<button class="btn btn-ghost" onclick="toast(\'📤 Enviando por WhatsApp...\')">📱 Enviar WhatsApp</button>'
-    +'<button class="btn btn-primary" onclick="toast(\'📄 Generando PDF...\')">⬇ Descargar PDF</button>'
+    +'<button class="btn btn-ghost" onclick="viewLastReportPdf()">👁 Ver PDF</button>'
+    +'<button class="btn btn-primary" onclick="downloadLastReportPdf()">⬇ Descargar PDF</button>'
     +'</div>'
     +'<div class="rpt">'
     +'<div class="rpt-head"><div><div class="rpt-brand">MantenPro</div><div class="rpt-sub">Servicios de Mantenimiento Comercial · Monterrey, NL</div></div><div class="rpt-badge">REPORTE OFICIAL</div></div>'
@@ -1098,6 +4643,7 @@ function buildReport(o){
     +'<div class="rf"><div class="rfl">Sucursal</div><div class="rfv">'+(br?br.name:'—')+'</div></div>'
     +'<div class="rf"><div class="rfl">Técnico</div><div class="rfv">'+(tc?tc.name:'—')+'</div></div>'
     +'<div class="rf"><div class="rfl">Fecha</div><div class="rfv">'+now+'</div></div>'
+    +'<div class="rf"><div class="rfl">Ubicación GPS</div><div class="rfv">'+locLabel+'</div></div>'
     +'</div>'
     +dynReport
     +'<div class="rdiv"></div>'
@@ -1105,13 +4651,68 @@ function buildReport(o){
     +'<div class="rphotos">'+photos+'</div>'
     +'<div class="rdiv"></div>'
     +'<div class="rst">Firma de conformidad</div>'
-    +'<div class="rsig"><img src="'+sigData+'" style="height:55px;max-width:100%;"><div class="rsig-lbl">Responsable en sucursal — '+(br?br.name:'—')+'</div></div>'
+    +'<div class="rsig">'+sigPreviewHtml+'<div class="rsig-lbl">Responsable en sucursal — '+(br?br.name:'—')+'</div></div>'
     +'<div class="rfoot"><div class="rfoot-brand">MantenPro</div><div class="rfoot-meta">Generado: '+now+' · '+o.id+'</div></div>'
     +'</div>';
 }
 
+bindPhotoInput();
 initSig();
+window.addEventListener('resize',function(){
+  refreshVisibleSignaturePads();
+},{passive:true});
+setWorkModeButtonLabel();
 renderDashboard();
+renderTechLiveGpsPanel();
+</script>
+<script type="module">
+(async function loadAuthModule(){
+  window.__authModuleReady=false;
+  function bindAuthSubmitGuards(){
+    ["login-form","register-form"].forEach(function(id){
+      var form=document.getElementById(id);
+      if(!form || form.__guardBound) return;
+      form.__guardBound=true;
+      form.addEventListener("submit",function(ev){
+        if(window.__authModuleReady) return;
+        ev.preventDefault();
+        var authMsg=document.getElementById("auth-msg");
+        if(authMsg){
+          authMsg.textContent="Cargando módulo de autenticación... verifica que index y auth.js estén en la misma carpeta.";
+          authMsg.className="auth-msg error";
+        }
+      });
+    });
+  }
+  bindAuthSubmitGuards();
+
+  var candidates=[
+    "./auth.js",
+    "/auth.js",
+    "auth.js",
+    "https://cdn.jsdelivr.net/gh/brianfotografia2507-ux/REPORTES-BRISAM@main/auth.js"
+  ];
+  var loaded=false,lastErr=null;
+  for(var i=0;i<candidates.length;i++){
+    try{
+      await import(candidates[i]);
+      loaded=true;
+      window.__authModuleReady=true;
+      break;
+    }catch(err){
+      lastErr=err;
+      console.warn("No se pudo cargar módulo auth desde:",candidates[i],err);
+    }
+  }
+  if(!loaded){
+    console.error("No fue posible cargar auth.js en ninguna ruta",lastErr);
+    var authMsg=document.getElementById("auth-msg");
+    if(authMsg){
+      authMsg.textContent="No se pudo cargar el módulo de autenticación (auth.js). Verifica la ruta del archivo.";
+      authMsg.className="auth-msg error";
+    }
+  }
+})();
 </script>
 </body>
 </html>
