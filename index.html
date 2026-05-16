@@ -333,6 +333,17 @@ canvas.sig.signed{border-color:var(--green);}
 .add-section-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
 .add-section-btn{display:flex;align-items:center;gap:5px;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;border:1px dashed var(--border);background:transparent;color:var(--muted2);transition:all .15s;font-family:'DM Sans',sans-serif;}
 .add-section-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--adim);}
+.req-toggle{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted2);margin:4px 0 8px;}
+.req-toggle input{accent-color:var(--accent);}
+.mc-opt-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
+.mc-opt-row{display:flex;align-items:center;gap:6px;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:7px 8px;}
+.mc-opt-row .fi{padding:6px 9px;font-size:12px;}
+.mc-opt-actions{display:flex;gap:4px;}
+.mc-choice-grid{display:flex;flex-direction:column;gap:7px;margin-top:6px;}
+.mc-choice-item{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);}
+.mc-choice-item input[type="radio"]{accent-color:var(--accent);}
+.sig-dyn-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;}
+.sig-dyn-status{font-size:11px;color:var(--muted2);}
 
 /* ── MOBILE ── */
 @media(max-width:720px){
@@ -743,8 +754,10 @@ canvas.sig.signed{border-color:var(--green);}
       <button class="add-section-btn" onclick="addSection('checklist')">☑️ Agregar sección de tareas</button>
       <button class="add-section-btn" onclick="addSection('fields')">📝 Agregar sección de campos</button>
       <button class="add-section-btn" onclick="addSection('textarea')">💬 Agregar área de texto</button>
+      <button class="add-section-btn" onclick="addSection('multiple_choice')">🔘 Agregar opción múltiple</button>
+      <button class="add-section-btn" onclick="addSection('signature')">✍️ Agregar firma</button>
     </div>
-    <p style="font-size:11px;color:var(--muted);margin-top:10px;">💡 Las <b>secciones de tareas</b> son check-lists de actividades. Las <b>secciones de campos</b> incluyen entradas personalizadas (texto, número, selector). Las <b>áreas de texto</b> son para observaciones libres.</p>
+    <p style="font-size:11px;color:var(--muted);margin-top:10px;">💡 Puedes combinar tareas, campos, texto libre, opción múltiple y firmas dinámicas para construir formularios personalizados.</p>
   </div>
   <div class="m-foot"><button class="btn btn-ghost" onclick="closeM('m-cl')">Cancelar</button><button class="btn btn-primary" onclick="saveCl()">Guardar Check-list</button></div>
 </div></div>
@@ -843,6 +856,7 @@ var curOrderId=null, chkState={}, sigDraw=false, sigSigned=false;
 var currentWorkMode='order';
 var currentFreeChecklistId='';
 var tmpSections=[];
+var dynamicSignatureState={};
 window.dashboardReportsCache=Array.isArray(window.dashboardReportsCache)?window.dashboardReportsCache:[];
 var techLiveGpsState={
   active:false,
@@ -916,12 +930,27 @@ function formatChecklistDate(value){
 
 function normalizeChecklistDoc(cl){
   var data=cl||{};
+  var sections=Array.isArray(data.sections)?JSON.parse(JSON.stringify(data.sections)):[];
+  sections=sections.map(function(sec){
+    var out=sec||{};
+    out.id=String(out.id||uid());
+    if(out.type==='multiple_choice'){
+      out.label=String(out.label||out.title||'Pregunta');
+      out.options=Array.isArray(out.options)?out.options:[];
+      out.required=out.required===true;
+    }
+    if(out.type==='signature'){
+      out.label=String(out.label||out.title||'Firma');
+      out.required=out.required===true;
+    }
+    return out;
+  });
   return {
     id:String(data.id||uid()),
     name:String(data.name||'Checklist').trim(),
     type:String(data.type||'General').trim()||'General',
     published:data.published===true,
-    sections:Array.isArray(data.sections)?JSON.parse(JSON.stringify(data.sections)):[],
+    sections:sections,
     createdAt:data.createdAt||null,
     updatedAt:data.updatedAt||null,
     createdBy:data.createdBy||''
@@ -1742,7 +1771,7 @@ function renderChecklists(){
     var totalItems=0;
     cl.sections.forEach(function(s){ if(s.type==='checklist') totalItems+=s.items.length; });
     var secLabels=cl.sections.map(function(s){
-      var icons={checklist:'☑️',fields:'📝',textarea:'💬'};
+      var icons={checklist:'☑️',fields:'📝',textarea:'💬',multiple_choice:'🔘',signature:'✍️'};
       return'<span class="chip">'+(icons[s.type]||'')+'  '+s.title+'</span>';
     }).join('');
     return'<div class="card"><div class="card-head"><div style="display:flex;align-items:center;gap:10px;"><div class="card-ico" style="background:rgba(167,139,250,.1);">✅</div><div><div class="card-title">'+cl.name+'</div><div class="card-sub">'+cl.type+' · '+formatChecklistDate(cl.updatedAt||cl.createdAt)+'</div></div></div><div class="card-acts"><button class="btn btn-ghost btn-sm btn-icon" onclick="openClM(\''+cl.id+'\')">✏️</button><button class="btn btn-danger btn-sm btn-icon" onclick="delCl(\''+cl.id+'\')">🗑️</button></div></div><div style="font-size:12px;color:var(--muted);margin-bottom:8px;">'+cl.sections.length+' secciones · '+totalItems+' tareas</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">'+secLabels+'</div><div class="card-meta"><span class="badge '+(cl.published?'b-act':'b-ina')+'">'+(cl.published?'Publicado':'No publicado')+'</span><button class="btn btn-ghost btn-sm" onclick="toggleChecklistPublished(\''+cl.id+'\')">'+(cl.published?'Despublicar':'Publicar')+'</button></div></div>';
@@ -1775,7 +1804,13 @@ function openClM(id){
 function renderBuilder(){
   var container=document.getElementById('cl-builder');
   container.innerHTML=tmpSections.map(function(sec,si){
-    var icons={checklist:'☑️ Tareas',fields:'📝 Campos',textarea:'💬 Texto libre'};
+    var icons={
+      checklist:'☑️ Tareas',
+      fields:'📝 Campos',
+      textarea:'💬 Texto libre',
+      multiple_choice:'🔘 Opción múltiple',
+      signature:'✍️ Firma'
+    };
     var bodyHtml='';
 
     if(sec.type==='checklist'){
@@ -1816,6 +1851,35 @@ function renderBuilder(){
         +'<input class="fi" value="'+sec.placeholder+'" oninput="tmpSections['+si+'].placeholder=this.value" placeholder="Ej: Escribe tus observaciones..."></div>';
     }
 
+    if(sec.type==='multiple_choice'){
+      if(!Array.isArray(sec.options)) sec.options=[];
+      var optionRows=sec.options.map(function(opt,oi){
+        return '<div class="mc-opt-row">'
+          +'<input class="fi" value="'+opt+'" oninput="tmpSections['+si+'].options['+oi+']=this.value" placeholder="Texto de opción">'
+          +'<div class="mc-opt-actions">'
+          +'<button class="cl-move-btn" onclick="moveMcOption('+si+','+oi+',-1)" '+(oi===0?'disabled':'')+'>↑</button>'
+          +'<button class="cl-move-btn" onclick="moveMcOption('+si+','+oi+',1)" '+(oi===sec.options.length-1?'disabled':'')+'>↓</button>'
+          +'<button class="cl-del-btn" onclick="removeMcOption('+si+','+oi+')">✕</button>'
+          +'</div>'
+          +'</div>';
+      }).join('');
+      bodyHtml='<div class="fg"><label class="fl" style="font-size:10px;">Pregunta</label>'
+        +'<input class="fi" value="'+(sec.label||'')+'" oninput="tmpSections['+si+'].label=this.value" placeholder="Ej: Estado de la freidora"></div>'
+        +'<label class="req-toggle"><input type="checkbox" '+(sec.required===true?'checked':'')+' onchange="toggleSectionRequired('+si+',this.checked)">Obligatorio</label>'
+        +'<div class="mc-opt-list">'+optionRows+'</div>'
+        +'<div class="cl-add-item-row">'
+        +'<input class="fi" id="new-mc-option-'+si+'" placeholder="Agregar opción..." onkeydown="if(event.key===\'Enter\'){event.preventDefault();addMcOption('+si+');}">'
+        +'<button class="btn btn-primary" onclick="addMcOption('+si+')">＋ Opción</button>'
+        +'</div>';
+    }
+
+    if(sec.type==='signature'){
+      bodyHtml='<div class="fg"><label class="fl" style="font-size:10px;">Etiqueta de firma</label>'
+        +'<input class="fi" value="'+(sec.label||'')+'" oninput="tmpSections['+si+'].label=this.value" placeholder="Ej: Firma del supervisor"></div>'
+        +'<label class="req-toggle"><input type="checkbox" '+(sec.required===true?'checked':'')+' onchange="toggleSectionRequired('+si+',this.checked)">Obligatorio</label>'
+        +'<div style="font-size:11px;color:var(--muted);">Se mostrará un canvas de firma dinámico en la vista técnico.</div>';
+    }
+
     return'<div class="cl-section-block">'
       +'<div class="cl-section-head">'
       +'<span class="sec-type-badge">'+(icons[sec.type]||sec.type)+'</span>'
@@ -1835,7 +1899,9 @@ function addSection(type){
   var defaults={
     checklist:{type:'checklist',title:'Nueva sección de tareas',items:[]},
     fields:{type:'fields',title:'Nueva sección de campos',fields:[]},
-    textarea:{type:'textarea',title:'Observaciones',placeholder:'Escribe tus observaciones aquí...'}
+    textarea:{type:'textarea',title:'Observaciones',placeholder:'Escribe tus observaciones aquí...'},
+    multiple_choice:{type:'multiple_choice',title:'Opción múltiple',label:'Nueva pregunta',options:['Opción 1','Opción 2'],required:false},
+    signature:{type:'signature',title:'Firma',label:'Firma del técnico',required:true}
   };
   tmpSections.push(Object.assign({id:uid()},JSON.parse(JSON.stringify(defaults[type]))));
   renderBuilder();
@@ -1873,18 +1939,72 @@ function addField(si){
   renderBuilder();
 }
 function removeField(si,fi){ tmpSections[si].fields.splice(fi,1); renderBuilder(); }
+function toggleSectionRequired(si,checked){ tmpSections[si].required=!!checked; }
+function addMcOption(si){
+  var input=document.getElementById('new-mc-option-'+si);
+  var txt=input?input.value.trim():'';
+  if(!txt){toast('⚠️ Escribe una opción');return;}
+  if(!Array.isArray(tmpSections[si].options)) tmpSections[si].options=[];
+  tmpSections[si].options.push(txt);
+  if(input) input.value='';
+  renderBuilder();
+}
+function removeMcOption(si,oi){
+  if(!Array.isArray(tmpSections[si].options)) return;
+  tmpSections[si].options.splice(oi,1);
+  renderBuilder();
+}
+function moveMcOption(si,oi,dir){
+  if(!Array.isArray(tmpSections[si].options)) return;
+  var ni=oi+dir;
+  if(ni<0 || ni>=tmpSections[si].options.length) return;
+  var cur=tmpSections[si].options[oi];
+  tmpSections[si].options[oi]=tmpSections[si].options[ni];
+  tmpSections[si].options[ni]=cur;
+  renderBuilder();
+}
 
 async function saveCl(){
   var eid=document.getElementById('cl-eid').value;
+  var rawSections=JSON.parse(JSON.stringify(tmpSections));
+  var normalizedSections=rawSections.map(function(sec){
+    var out=Object.assign({},sec||{});
+    out.id=String(out.id||uid());
+    out.title=String(out.title||'Sección').trim();
+    if(out.type==='multiple_choice'){
+      out.label=String(out.label||out.title||'Pregunta').trim();
+      out.options=(Array.isArray(out.options)?out.options:[]).map(function(opt){ return String(opt||'').trim(); }).filter(Boolean);
+      out.required=out.required===true;
+    }
+    if(out.type==='signature'){
+      out.label=String(out.label||out.title||'Firma').trim();
+      out.required=out.required===true;
+    }
+    return out;
+  });
   var data={
     id:eid||'',
     name:document.getElementById('cl-name').value.trim(),
     type:document.getElementById('cl-type').value,
     published:document.getElementById('cl-published').value==='true',
-    sections:JSON.parse(JSON.stringify(tmpSections))
+    sections:normalizedSections
   };
   if(!data.name){toast('⚠️ El nombre es requerido');return;}
   if(!data.sections.length){toast('⚠️ Agrega al menos una sección');return;}
+  var invalidMc=data.sections.find(function(sec){
+    return sec.type==='multiple_choice' && (!sec.label || !Array.isArray(sec.options) || !sec.options.length);
+  });
+  if(invalidMc){
+    toast('⚠️ Cada sección de opción múltiple debe tener pregunta y al menos una opción');
+    return;
+  }
+  var invalidSig=data.sections.find(function(sec){
+    return sec.type==='signature' && !sec.label;
+  });
+  if(invalidSig){
+    toast('⚠️ Cada sección de firma debe tener una etiqueta');
+    return;
+  }
   if(typeof window.saveChecklistToFirestore!=='function'){
     toast('⚠️ Sin conexión con Firestore para checklists');
     return;
@@ -1935,6 +2055,128 @@ function setWorkModeButtonLabel(){
   btn.textContent=currentWorkMode==='free'?'✓ Guardar Checklist y Generar Reporte':'✓ Cerrar Orden y Generar Reporte';
 }
 
+function normalizeSectionDomKey(raw){
+  return String(raw||'').replace(/[^a-zA-Z0-9_-]/g,'_');
+}
+
+function initDynamicSignatureCanvas(sectionId){
+  var key=normalizeSectionDomKey(sectionId);
+  var canvas=document.getElementById('sigdyn-'+key);
+  if(!canvas) return;
+  var statusEl=document.getElementById('sigdyn-st-'+key);
+  var ctx=canvas.getContext('2d');
+  ctx.strokeStyle='#f97316';
+  ctx.lineWidth=2;
+  ctx.lineCap='round';
+  ctx.lineJoin='round';
+  var drawing=false;
+  function setSigned(){
+    dynamicSignatureState[key]={signed:true,value:canvas.toDataURL('image/png')};
+    if(statusEl) statusEl.textContent='✓ Firmado';
+  }
+  function getPos(e){
+    var r=canvas.getBoundingClientRect();
+    var s=e.touches?e.touches[0]:e;
+    return{x:(s.clientX-r.left)*(canvas.width/r.width),y:(s.clientY-r.top)*(canvas.height/r.height)};
+  }
+  function start(e){
+    e.preventDefault();
+    drawing=true;
+    var p=getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x,p.y);
+  }
+  function draw(e){
+    if(!drawing) return;
+    e.preventDefault();
+    var p=getPos(e);
+    ctx.lineTo(p.x,p.y);
+    ctx.stroke();
+    setSigned();
+  }
+  function stop(){ drawing=false; }
+  canvas.addEventListener('mousedown',start);
+  canvas.addEventListener('mousemove',draw);
+  canvas.addEventListener('mouseup',stop);
+  canvas.addEventListener('mouseleave',stop);
+  canvas.addEventListener('touchstart',start,{passive:false});
+  canvas.addEventListener('touchmove',draw,{passive:false});
+  canvas.addEventListener('touchend',stop);
+  dynamicSignatureState[key]={signed:false,value:''};
+  if(statusEl) statusEl.textContent='Sin firmar';
+}
+
+function clearSectionSignature(sectionId){
+  var key=normalizeSectionDomKey(sectionId);
+  var canvas=document.getElementById('sigdyn-'+key);
+  var statusEl=document.getElementById('sigdyn-st-'+key);
+  if(!canvas) return;
+  canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+  dynamicSignatureState[key]={signed:false,value:''};
+  if(statusEl) statusEl.textContent='Sin firmar';
+}
+
+function buildWorkDynamicHtml(ck){
+  var dynHtml='';
+  chkState={};
+  dynamicSignatureState={};
+  var sections=(ck&&Array.isArray(ck.sections))?ck.sections:[];
+  sections.forEach(function(sec,si){
+    if(sec.type==='checklist'){
+      dynHtml+='<div class="sec" style="margin-top:16px;">'+sec.title+'</div><div class="cl-list" id="cl-sec-'+si+'">';
+      (sec.items||[]).forEach(function(item,ii){
+        var key='s'+si+'i'+ii;
+        chkState[key]=false;
+        dynHtml+='<div class="ci" id="ci-'+key+'" onclick="toggleCheck(\''+key+'\')"><div class="ci-box" id="cb-'+key+'"></div><span class="ci-lbl">'+item.text+'</span><span class="ci-cat">'+(item.cat||'General')+'</span></div>';
+      });
+      dynHtml+='</div>';
+      return;
+    }
+    if(sec.type==='fields'){
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+sec.title+'</div>';
+      (sec.fields||[]).forEach(function(f){
+        dynHtml+='<div class="dyn-field"><label>'+f.label+'</label>'+(f.inputType==='textarea'?'<textarea class="ft" id="df-'+f.id+'" placeholder="'+f.label+'..."></textarea>':'<input class="fi" id="df-'+f.id+'" type="'+f.inputType+'" placeholder="'+f.label+'">')+'</div>';
+      });
+      dynHtml+='</div>';
+      return;
+    }
+    if(sec.type==='textarea'){
+      dynHtml+='<div class="fg" style="margin-top:14px;"><label class="fl">'+sec.title+'</label><textarea class="ft" id="dta-'+sec.id+'" placeholder="'+(sec.placeholder||'Escribe aquí...')+'"></textarea></div>';
+      return;
+    }
+    if(sec.type==='multiple_choice'){
+      var secKey=normalizeSectionDomKey(sec.id||('mc-'+si));
+      var requiredLabel=sec.required===true?' <span style="color:var(--accent)">*</span>':'';
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+(sec.title||'Opción múltiple')+'</div><div class="dyn-field"><label>'+(sec.label||'Pregunta')+requiredLabel+'</label><div class="mc-choice-grid">';
+      (sec.options||[]).forEach(function(opt,oi){
+        dynHtml+='<label class="mc-choice-item"><input type="radio" name="mc-'+secKey+'" value="'+opt+'"><span>'+opt+'</span></label>';
+      });
+      dynHtml+='</div></div></div>';
+      return;
+    }
+    if(sec.type==='signature'){
+      var sigKey=normalizeSectionDomKey(sec.id||('sig-'+si));
+      var req=sec.required===true?' <span style="color:var(--accent)">*</span>':'';
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+(sec.title||'Firma')+'</div><div class="dyn-field"><label>'+(sec.label||'Firma')+req+'</label><canvas class="sig" id="sigdyn-'+sigKey+'" width="520" height="130"></canvas><div class="sig-dyn-tools"><button class="btn btn-ghost btn-sm" onclick="clearSectionSignature(\''+String(sec.id||'')+'\')">Limpiar firma</button><span class="sig-dyn-status" id="sigdyn-st-'+sigKey+'">Sin firmar</span></div></div></div>';
+      return;
+    }
+  });
+  if(!dynHtml){
+    chkState['s0i0']=false;
+    dynHtml='<div class="sec" style="margin-top:16px;">Actividades</div><div class="cl-list"><div class="ci" id="ci-s0i0" onclick="toggleCheck(\'s0i0\')"><div class="ci-box" id="cb-s0i0"></div><span class="ci-lbl">Revisión general</span><span class="ci-cat">General</span></div></div>';
+  }
+  return dynHtml;
+}
+
+function initDynamicWorkSections(ck){
+  var sections=(ck&&Array.isArray(ck.sections))?ck.sections:[];
+  sections.forEach(function(sec,si){
+    if(sec.type==='signature'){
+      initDynamicSignatureCanvas(sec.id||('sig-'+si));
+    }
+  });
+}
+
 function renderTechChecklistPage(){
   var box=document.getElementById('tech-checklist-grid');
   if(!box) return;
@@ -1962,34 +2204,9 @@ function openTechChecklistWork(checklistId){
   document.getElementById('wd-name').textContent=ck.name;
   document.getElementById('wd-loc').textContent='Checklist libre · '+ck.type;
 
-  chkState={};
-  var dynHtml='';
-  ck.sections.forEach(function(sec,si){
-    if(sec.type==='checklist'){
-      dynHtml+='<div class="sec" style="margin-top:16px;">'+sec.title+'</div><div class="cl-list" id="cl-sec-'+si+'">';
-      (sec.items||[]).forEach(function(item,ii){
-        var key='s'+si+'i'+ii;
-        chkState[key]=false;
-        dynHtml+='<div class="ci" id="ci-'+key+'" onclick="toggleCheck(\''+key+'\')"><div class="ci-box" id="cb-'+key+'"></div><span class="ci-lbl">'+item.text+'</span><span class="ci-cat">'+(item.cat||'General')+'</span></div>';
-      });
-      dynHtml+='</div>';
-    }
-    if(sec.type==='fields'){
-      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+sec.title+'</div>';
-      (sec.fields||[]).forEach(function(f){
-        dynHtml+='<div class="dyn-field"><label>'+f.label+'</label>'+(f.inputType==='textarea'?'<textarea class="ft" id="df-'+f.id+'" placeholder="'+f.label+'..."></textarea>':'<input class="fi" id="df-'+f.id+'" type="'+f.inputType+'" placeholder="'+f.label+'">')+'</div>';
-      });
-      dynHtml+='</div>';
-    }
-    if(sec.type==='textarea'){
-      dynHtml+='<div class="fg" style="margin-top:14px;"><label class="fl">'+sec.title+'</label><textarea class="ft" id="dta-'+sec.id+'" placeholder="'+(sec.placeholder||'Escribe aquí...')+'"></textarea></div>';
-    }
-  });
-  if(!dynHtml){
-    chkState['s0i0']=false;
-    dynHtml='<div class="sec" style="margin-top:16px;">Actividades</div><div class="cl-list"><div class="ci" id="ci-s0i0" onclick="toggleCheck(\'s0i0\')"><div class="ci-box" id="cb-s0i0"></div><span class="ci-lbl">Revisión general</span><span class="ci-cat">General</span></div></div>';
-  }
+  var dynHtml=buildWorkDynamicHtml(ck);
   document.getElementById('wd-dynamic').innerHTML=dynHtml;
+  initDynamicWorkSections(ck);
   sigSigned=false;
   document.getElementById('sig-st').textContent='Sin firmar';
   resetPhotoSlots();
@@ -2049,45 +2266,9 @@ function openWork(id){
   document.getElementById('wd-name').textContent=o.type;
   document.getElementById('wd-loc').textContent=(cl?cl.name:'—')+' — '+(br?br.name:'—');
 
-  chkState={};
-  var dynHtml='';
-
-  if(ck){
-    ck.sections.forEach(function(sec,si){
-      if(sec.type==='checklist'){
-        dynHtml+='<div class="sec" style="margin-top:16px;">'+sec.title+'</div><div class="cl-list" id="cl-sec-'+si+'">';
-        sec.items.forEach(function(item,ii){
-          var key='s'+si+'i'+ii;
-          chkState[key]=false;
-          dynHtml+='<div class="ci" id="ci-'+key+'" onclick="toggleCheck(\''+key+'\')">'
-            +'<div class="ci-box" id="cb-'+key+'"></div>'
-            +'<span class="ci-lbl">'+item.text+'</span>'
-            +'<span class="ci-cat">'+item.cat+'</span>'
-            +'</div>';
-        });
-        dynHtml+='</div>';
-      }
-      if(sec.type==='fields'){
-        dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+sec.title+'</div>';
-        sec.fields.forEach(function(f){
-          dynHtml+='<div class="dyn-field"><label>'+f.label+'</label>';
-          if(f.inputType==='textarea') dynHtml+='<textarea class="ft" id="df-'+f.id+'" placeholder="'+f.label+'..."></textarea>';
-          else dynHtml+='<input class="fi" id="df-'+f.id+'" type="'+f.inputType+'" placeholder="'+f.label+'">';
-          dynHtml+='</div>';
-        });
-        dynHtml+='</div>';
-      }
-      if(sec.type==='textarea'){
-        dynHtml+='<div class="fg" style="margin-top:14px;"><label class="fl">'+sec.title+'</label>'
-          +'<textarea class="ft" id="dta-'+sec.id+'" placeholder="'+sec.placeholder+'"></textarea></div>';
-      }
-    });
-  } else {
-    chkState['s0i0']=false;
-    dynHtml='<div class="sec" style="margin-top:16px;">Actividades</div><div class="cl-list"><div class="ci" id="ci-s0i0" onclick="toggleCheck(\'s0i0\')"><div class="ci-box" id="cb-s0i0"></div><span class="ci-lbl">Revisión general</span><span class="ci-cat">General</span></div></div>';
-  }
-
+  var dynHtml=buildWorkDynamicHtml(ck);
   document.getElementById('wd-dynamic').innerHTML=dynHtml;
+  initDynamicWorkSections(ck);
   sigSigned=false;
   document.getElementById('sig-st').textContent='Sin firmar';
   resetPhotoSlots();
@@ -2386,6 +2567,20 @@ function getReportSections(reportData){
   return [];
 }
 
+function extractDynamicSignaturesFromSections(sections){
+  var list=[];
+  (Array.isArray(sections)?sections:[]).forEach(function(sec){
+    if(!sec || sec.type!=='signature') return;
+    var value=String(sec.value||'').trim();
+    if(!value) return;
+    list.push({
+      label:safePdfText(sec.label||sec.title||'Firma','Firma'),
+      value:value
+    });
+  });
+  return list;
+}
+
 function normalizeLookupLabel(value){
   return String(value||'')
     .toLowerCase()
@@ -2437,6 +2632,18 @@ function findSectionValueByKeywords(sections,keywords){
     }
     if(sec.type==='textarea'){
       if(hasTerm(sec.title) && String(sec.value||'').trim()){
+        return String(sec.value||'').trim();
+      }
+    }
+    if(sec.type==='multiple_choice'){
+      var mcLabel=sec.label||sec.title||'';
+      if(hasTerm(mcLabel) && String(sec.value||'').trim()){
+        return String(sec.value||'').trim();
+      }
+    }
+    if(sec.type==='signature'){
+      var sigLabel=sec.label||sec.title||'';
+      if(hasTerm(sigLabel) && String(sec.value||'').trim()){
         return String(sec.value||'').trim();
       }
     }
@@ -2533,6 +2740,7 @@ function buildPdfReportModel(reportData){
     templateType:resolvePdfTemplateType(source),
     checklistName:safePdfText(source.checklistNombre||source.checklistName,'Checklist de servicio'),
     sections:sections,
+    dynamicSignatures:extractDynamicSignaturesFromSections(sections),
     photos:uniquePhotos,
     signatureTecnico:String(source.firmaTecnico||source.technicianSignatureData||source.signatureData||'').trim(),
     signatureGerente:String(source.firmaGerente||source.managerSignatureData||source.signatureManagerData||'').trim()
@@ -2763,9 +2971,47 @@ function buildCorrectivoServiceSection(doc,layout,y,model){
   return drawPdfTextBlock(doc,layout,y,'Detalle del servicio',model.servicio,'service');
 }
 
-function buildObservationsSection(doc,layout,y,model,sectionNumber){
+function buildAdditionalResponsesSummary(sections){
+  var lines=[];
+  (Array.isArray(sections)?sections:[]).forEach(function(sec){
+    if(!sec) return;
+    if(sec.type==='multiple_choice'){
+      if(String(sec.value||'').trim()){
+        lines.push((sec.label||sec.title||'Pregunta')+': '+sec.value);
+      }
+      return;
+    }
+    if(sec.type==='fields'){
+      (sec.fields||[]).forEach(function(field){
+        if(String(field&&field.value||'').trim()){
+          lines.push((field.label||'Campo')+': '+field.value);
+        }
+      });
+      return;
+    }
+    if(sec.type==='textarea'){
+      if(String(sec.value||'').trim()){
+        lines.push((sec.title||'Texto')+': '+sec.value);
+      }
+      return;
+    }
+    if(sec.type==='checklist'){
+      var done=(sec.items||[]).filter(function(item){ return !!(item&&item.checked); }).length;
+      if((sec.items||[]).length){
+        lines.push((sec.title||'Checklist')+': '+done+' / '+(sec.items||[]).length+' realizado(s)');
+      }
+    }
+  });
+  return lines.join('\n');
+}
+
+function buildObservationsSection(doc,layout,y,model,sectionNumber,extraSummary){
   y=drawPdfSectionHeading(doc,layout,y,sectionNumber||'05','Observaciones / recomendaciones finales');
-  return drawPdfTextBlock(doc,layout,y,'Notas adicionales',model.observaciones);
+  var notes=safePdfText(model.observaciones,'No especificado');
+  if(String(extraSummary||'').trim()){
+    notes=notes==='No especificado' ? String(extraSummary).trim() : notes+'\n\n'+String(extraSummary).trim();
+  }
+  return drawPdfTextBlock(doc,layout,y,'Notas adicionales',notes);
 }
 
 function classifyFixedFieldKey(label){
@@ -2838,6 +3084,15 @@ function extractAdditionalSectionsForCorrectivo(model){
         title:sec.title,
         items:items
       });
+      return;
+    }
+    if(sec.type==='multiple_choice'){
+      if(isIgnorableCorrectivoText(sec.label||sec.title)) return;
+      if(!String(sec.value||'').trim()) return;
+      additional.push(sec);
+      return;
+    }
+    if(sec.type==='signature'){
       return;
     }
     additional.push(sec);
@@ -3009,6 +3264,15 @@ function buildChecklistSections(doc,layout,y,model,options){
       y=drawPdfTextBlock(doc,layout,y,sectionTitle,safePdfText(sec.value,'No especificado'));
       return;
     }
+    if(sec.type==='multiple_choice'){
+      var question=safePdfText(sec.label||sec.title||'Opción múltiple','Opción múltiple');
+      var answer=safePdfText(sec.value,'Sin respuesta');
+      y=drawPdfTextBlock(doc,layout,y,question,answer);
+      return;
+    }
+    if(sec.type==='signature'){
+      return;
+    }
 
     y=drawPdfTextBlock(doc,layout,y,sectionTitle,'Tipo de sección no reconocido. Se conservó la información base del checklist.');
   });
@@ -3124,6 +3388,52 @@ function buildSignatures(doc,layout,y,model,options){
   drawSignature(model.signatureTecnico,layout.margin,'Firma del técnico',model.tecnico,'Técnico · BRISAM');
   drawSignature(model.signatureGerente,layout.margin+colW+gap,'Firma del gerente en turno',model.gerente,'Gerente · '+model.cliente);
   y+=boxH+4;
+
+  var extras=(Array.isArray(model.dynamicSignatures)?model.dynamicSignatures:[]).filter(function(sig){
+    if(!sig || !sig.value) return false;
+    var lbl=normalizeLookupLabel(sig.label||'');
+    if(model.signatureTecnico && (sig.value===model.signatureTecnico || lbl.indexOf('tecnico')!==-1)) return false;
+    if(model.signatureGerente && (sig.value===model.signatureGerente || lbl.indexOf('gerente')!==-1)) return false;
+    return true;
+  });
+  if(extras.length){
+    y=ensurePdfSpace(doc,y,12,layout);
+    doc.setFont('courier','normal');
+    doc.setFontSize(6.8);
+    doc.setTextColor(138,138,133);
+    doc.text('FIRMAS ADICIONALES',layout.margin,y+2.8);
+    y+=5.2;
+    var exCols=2;
+    var exGap=6;
+    var exColW=(layout.contentW-exGap)/exCols;
+    var exBoxH=24;
+    extras.forEach(function(sig,idx){
+      if(idx%exCols===0){
+        y=ensurePdfSpace(doc,y,exBoxH+6,layout);
+      }
+      var col=idx%exCols;
+      var x=layout.margin+(col*(exColW+exGap));
+      var rowY=y;
+      doc.setDrawColor(226,226,222);
+      doc.setFillColor(247,247,245);
+      doc.roundedRect(x,rowY,exColW,exBoxH,1.2,1.2,'FD');
+      doc.setFont('courier','normal');
+      doc.setFontSize(6.2);
+      doc.setTextColor(138,138,133);
+      doc.text(safePdfText(sig.label,'Firma').toUpperCase(),x+2,rowY+3.4);
+      try{
+        var exFmt=String(sig.value).indexOf('data:image/jpeg')===0?'JPEG':'PNG';
+        doc.addImage(sig.value,exFmt,x+2,rowY+5,exColW-4,13,undefined,'FAST');
+      }catch(_err){
+        doc.setDrawColor(210,210,205);
+        doc.line(x+2,rowY+17,x+exColW-2,rowY+17);
+      }
+      if(col===exCols-1 || idx===extras.length-1){
+        y=rowY+exBoxH+3;
+      }
+    });
+  }
+
   y=drawPdfTextBlock(
     doc,
     layout,
@@ -3208,6 +3518,7 @@ async function generateCorrectivoPdf(reportData){
   var model=buildPdfReportModel(reportData||{});
   model.brandLogo=await getPdfBrandLogoAsset();
   model.photoSources=await resolvePdfPhotos(model.photos);
+  var correctivoExtraSummary=buildAdditionalResponsesSummary(extractAdditionalSectionsForCorrectivo(model));
 
   var doc=new JsPdf({orientation:'p',unit:'mm',format:'a4'});
   var layout=createPdfLayout(doc);
@@ -3220,7 +3531,7 @@ async function generateCorrectivoPdf(reportData){
   y+=1.8;
   y=buildPhotoEvidence(doc,layout,y,model,{sectionNumber:'04'});
   y+=1.8;
-  y=buildObservationsSection(doc,layout,y,model,'05');
+  y=buildObservationsSection(doc,layout,y,model,'05',correctivoExtraSummary);
   y+=1.8;
   y=buildSignatures(doc,layout,y,model,{sectionNumber:'06'});
   y+=1.8;
@@ -3368,6 +3679,32 @@ function collectChecklistReportData(ck,total,done){
         respuestas.sections.push({id:sec.id,type:'textarea',title:sec.title,value:text});
         if(text) obs.push(sec.title+': '+text);
       }
+      if(sec.type==='multiple_choice'){
+        var secKey=normalizeSectionDomKey(sec.id||('mc-'+si));
+        var selected=document.querySelector('input[name="mc-'+secKey+'"]:checked');
+        var value=selected?selected.value:'';
+        respuestas.sections.push({
+          id:sec.id,
+          type:'multiple_choice',
+          title:sec.title||'Opción múltiple',
+          label:sec.label||sec.title||'Pregunta',
+          required:sec.required===true,
+          options:Array.isArray(sec.options)?sec.options:[],
+          value:value
+        });
+      }
+      if(sec.type==='signature'){
+        var sigKey=normalizeSectionDomKey(sec.id||('sig-'+si));
+        var state=dynamicSignatureState[sigKey]||{signed:false,value:''};
+        respuestas.sections.push({
+          id:sec.id,
+          type:'signature',
+          title:sec.title||'Firma',
+          label:sec.label||sec.title||'Firma',
+          required:sec.required===true,
+          value:state.value||''
+        });
+      }
     });
   } else {
     respuestas.sections.push({
@@ -3405,6 +3742,18 @@ function findChecklistAnswerValue(respuestas,keywords){
         return String(sec.value||'').trim();
       }
     }
+    if(sec.type==='multiple_choice'){
+      var mcLabel=sec.label||sec.title||'';
+      if(hasKeyword(mcLabel) && String(sec.value||'').trim()){
+        return String(sec.value||'').trim();
+      }
+    }
+    if(sec.type==='signature'){
+      var sigLabel=sec.label||sec.title||'';
+      if(hasKeyword(sigLabel) && String(sec.value||'').trim()){
+        return String(sec.value||'').trim();
+      }
+    }
   }
   return '';
 }
@@ -3434,6 +3783,43 @@ function extractBrisamReportMeta(respuestas,defaultObservaciones){
   };
 }
 
+function validateRequiredChecklistSections(ck,respuestas){
+  var errors=[];
+  if(!ck || !Array.isArray(ck.sections)) return errors;
+  var answeredById={};
+  var answered=(respuestas && Array.isArray(respuestas.sections))?respuestas.sections:[];
+  answered.forEach(function(sec){ answeredById[String(sec.id||'')]=sec; });
+  ck.sections.forEach(function(sec){
+    if(!sec || !sec.type) return;
+    var answer=answeredById[String(sec.id||'')]||{};
+    if(sec.type==='multiple_choice' && sec.required===true){
+      if(!String(answer.value||'').trim()){
+        errors.push('Responde la opción obligatoria: '+(sec.label||sec.title||'Pregunta'));
+      }
+    }
+    if(sec.type==='signature' && sec.required===true){
+      if(!String(answer.value||'').trim()){
+        errors.push('Se requiere firma en: '+(sec.label||sec.title||'Firma'));
+      }
+    }
+    if(sec.type==='textarea' && sec.required===true){
+      if(!String(answer.value||'').trim()){
+        errors.push('Completa el campo obligatorio: '+(sec.title||'Texto'));
+      }
+    }
+    if(sec.type==='fields'){
+      var requiredFields=(sec.fields||[]).filter(function(f){ return f && f.required===true; });
+      requiredFields.forEach(function(field){
+        var fieldAnswer=((answer.fields||[]).find(function(a){ return a.id===field.id; })||{}).value;
+        if(!String(fieldAnswer||'').trim()){
+          errors.push('Completa el campo obligatorio: '+(field.label||'Campo'));
+        }
+      });
+    }
+  });
+  return errors;
+}
+
 async function closeOrder(){
   if(closingOrderInProgress){ return; }
   var keys=Object.keys(chkState),total=keys.length,done=keys.filter(function(k){return chkState[k];}).length;
@@ -3460,11 +3846,15 @@ async function closeOrder(){
     br=gBranch(o.branchId);
   }
 
-  closingOrderInProgress=true;
   var closeBtn=document.querySelector('#wd-wrap .btn.btn-success');
-  if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
-
   var captured=collectChecklistReportData(ck,total,done);
+  var requiredErrors=validateRequiredChecklistSections(ck,captured.respuestas);
+  if(requiredErrors.length){
+    toast('⚠️ '+requiredErrors[0]);
+    return;
+  }
+  closingOrderInProgress=true;
+  if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
   var reportMeta=extractBrisamReportMeta(captured.respuestas,captured.observaciones||(!isFree&&o?o.desc:''));
   var signatureData=document.getElementById('sig-c').toDataURL('image/png');
   var reportFolio=isFree?generatedFolio:o.id;
