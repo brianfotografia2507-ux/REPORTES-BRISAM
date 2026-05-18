@@ -5,13 +5,86 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isAdmin() {
+    function userRole() {
       return isSignedIn()
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "administrador";
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isAdmin() {
+      return userRole() == "administrador";
+    }
+
+    function isTech() {
+      return userRole() == "tecnico";
     }
 
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function techCanOnlyChangeOrderStatus() {
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly([
+        "status",
+        "updatedAt"
+      ]) && request.resource.data.status in ["pending", "progress", "done"];
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) || isAdmin();
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /technicians/{docId} {
+      allow read: if isAdmin() || (isTech() && request.auth.uid == docId);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /checklists/{docId} {
+      allow read: if isAdmin() || (isTech() && resource.data.published == true);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /clients/{docId} {
+      allow read: if isAdmin() || isTech();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /branches/{docId} {
+      allow read: if isAdmin() || isTech();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /equipment/{docId} {
+      allow read: if isAdmin() || isTech();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /orders/{docId} {
+      allow read: if isAdmin() || (isTech() && resource.data.techId == request.auth.uid);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (
+          isTech()
+          && resource.data.techId == request.auth.uid
+          && techCanOnlyChangeOrderStatus()
+        );
+    }
+
+    match /reportes/{docId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /checklist_reports/{docId} {
+      allow read: if isAdmin()
+        || (isTech() && resource.data.technicianId == request.auth.uid);
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
     }
 
     match /live_locations/{uid} {

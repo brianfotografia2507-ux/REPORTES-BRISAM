@@ -1194,13 +1194,85 @@ function normalizeBranchDoc(branch){
   };
 }
 
+function normalizeClientDoc(client){
+  var data=client||{};
+  return{
+    id:String(data.id||uid()),
+    name:String(data.name||'Cliente').trim(),
+    contact:String(data.contact||'').trim(),
+    phone:String(data.phone||'').trim(),
+    email:String(data.email||'').trim(),
+    notes:String(data.notes||'').trim(),
+    createdAt:data.createdAt||null,
+    updatedAt:data.updatedAt||null
+  };
+}
+
+function normalizeTechnicianDoc(tech){
+  var data=tech||{};
+  return{
+    id:String(data.id||uid()),
+    name:String(data.name||'Técnico').trim(),
+    email:String(data.email||'').trim(),
+    spec:String(data.spec||'').trim(),
+    phone:String(data.phone||'').trim(),
+    status:data.status==='inactive'?'inactive':'active',
+    notes:String(data.notes||'').trim(),
+    createdAt:data.createdAt||null,
+    updatedAt:data.updatedAt||null
+  };
+}
+
+function normalizeEquipmentDoc(equipment){
+  var data=equipment||{};
+  return{
+    id:String(data.id||uid()),
+    branchId:String(data.branchId||''),
+    name:String(data.name||'Equipo').trim(),
+    type:String(data.type||'General').trim()||'General',
+    brand:String(data.brand||'').trim(),
+    model:String(data.model||'').trim(),
+    year:String(data.year||'').trim(),
+    status:data.status==='inactive'?'inactive':'active',
+    notes:String(data.notes||'').trim(),
+    createdAt:data.createdAt||null,
+    updatedAt:data.updatedAt||null
+  };
+}
+
+function formatOrderDateLabel(order){
+  if(order && order.date) return String(order.date);
+  var ms=parseOrderDateToMs((order&&order.createdAt)||(order&&order.updatedAt)||Date.now());
+  return new Date(ms).toLocaleString('es-MX',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+function normalizeOrderDoc(order){
+  var data=order||{};
+  var rawStatus=String(data.status||'').trim().toLowerCase();
+  var status='pending';
+  if(rawStatus==='progress' || rawStatus==='done') status=rawStatus;
+  var out={
+    id:String(data.id||uid()),
+    folio:String(data.folio||'').trim(),
+    type:String(data.type||'Orden de trabajo').trim()||'Orden de trabajo',
+    clientId:String(data.clientId||''),
+    branchId:String(data.branchId||''),
+    techId:String(data.techId||''),
+    clId:String(data.clId||''),
+    priority:String(data.priority||'Normal'),
+    desc:String(data.desc||'').trim(),
+    status:status,
+    date:String(data.date||'').trim(),
+    createdAt:data.createdAt||null,
+    updatedAt:data.updatedAt||null
+  };
+  if(!out.date) out.date=formatOrderDateLabel(out);
+  return out;
+}
+
 window.setFirestoreChecklistsData=function setFirestoreChecklistsData(items){
   var list=Array.isArray(items)?items.map(normalizeChecklistDoc):[];
-  if(!list.length){
-    DB.checklists=[];
-  }else{
-    DB.checklists=list;
-  }
+  DB.checklists=list;
   renderChecklists();
   renderTechChecklistPage();
 };
@@ -1210,6 +1282,46 @@ window.setFirestoreBranchesData=function setFirestoreBranchesData(items){
   DB.branches=list;
   renderBranches();
   renderEquipment();
+  renderOrders();
+  renderDashboard();
+  renderTechView();
+};
+
+window.setFirestoreClientsData=function setFirestoreClientsData(items){
+  var list=Array.isArray(items)?items.map(normalizeClientDoc):[];
+  DB.clients=list;
+  renderClients();
+  renderBranches();
+  renderOrders();
+  renderDashboard();
+  renderTechView();
+};
+
+window.setFirestoreTechniciansData=function setFirestoreTechniciansData(items){
+  var list=Array.isArray(items)?items.map(normalizeTechnicianDoc):[];
+  DB.technicians=list;
+  renderTechs();
+  renderOrders();
+  renderDashboard();
+  renderTechView();
+};
+
+window.setFirestoreEquipmentData=function setFirestoreEquipmentData(items){
+  var list=Array.isArray(items)?items.map(normalizeEquipmentDoc):[];
+  DB.equipment=list;
+  renderEquipment();
+  renderBranches();
+};
+
+window.setFirestoreOrdersData=function setFirestoreOrdersData(items){
+  var list=Array.isArray(items)?items.map(normalizeOrderDoc):[];
+  DB.orders=list.sort(function(a,b){
+    return parseOrderDateToMs((b&&b.createdAt)||(b&&b.updatedAt)||(b&&b.date)||0)-parseOrderDateToMs((a&&a.createdAt)||(a&&a.updatedAt)||(a&&a.date)||0);
+  });
+  renderOrders();
+  renderDashboard();
+  renderTechs();
+  renderTechView();
 };
 
 var APP_ACTIVE_PAGE='dashboard';
@@ -1598,6 +1710,34 @@ function toast(msg){
   t.classList.add('on');
   setTimeout(function(){ t.classList.remove('on'); },3000);
 }
+function isFirestorePermissionError(err){
+  var code=String((err&&err.code)||'').toLowerCase();
+  return code==='permission-denied' || code==='firestore/permission-denied' || code==='firebase/firestore/permission-denied';
+}
+function handleFirestoreSaveError(err,fallbackMsg){
+  if(isFirestorePermissionError(err)){
+    toast('No se pudo guardar en Firebase. Revisa permisos.');
+    return;
+  }
+  toast(fallbackMsg||'❌ No se pudo guardar en Firebase');
+}
+function upsertLocalById(list,item,prepend){
+  if(!Array.isArray(list) || !item || !item.id) return;
+  var idx=-1;
+  for(var i=0;i<list.length;i++){ if(list[i]&&list[i].id===item.id){ idx=i; break; } }
+  if(idx===-1){
+    if(prepend) list.unshift(item);
+    else list.push(item);
+    return;
+  }
+  list[idx]=Object.assign({},list[idx],item);
+}
+function removeLocalById(list,id){
+  if(!Array.isArray(list)) return;
+  for(var i=list.length-1;i>=0;i--){
+    if(list[i]&&list[i].id===id) list.splice(i,1);
+  }
+}
 function renderLucideIcons(){ if(window.lucide && typeof window.lucide.createIcons==='function'){ window.lucide.createIcons(); } }
 function openM(id){ document.getElementById(id).classList.add('on'); }
 function closeM(id){ document.getElementById(id).classList.remove('on'); }
@@ -1658,7 +1798,7 @@ function getDashboardMetricsSnapshot(){
   });
 
   var total=orders.length;
-  var done=orders.filter(function(o){ return doneSet[o.id] || o.status==='done'; }).length;
+  var done=orders.filter(function(o){ return doneSet[o.id] || (o.folio&&doneSet[o.folio]) || o.status==='done'; }).length;
   var progress=orders.filter(function(o){ return o.status==='progress'; }).length;
   var pending=orders.filter(function(o){ return o.status==='pending'; }).length;
 
@@ -1670,7 +1810,7 @@ function getDashboardMetricsSnapshot(){
     })
     .map(function(t){
       var tOrders=orders.filter(function(o){ return o.techId===t.id; });
-      var tDone=tOrders.filter(function(o){ return doneSet[o.id] || o.status==='done'; }).length;
+      var tDone=tOrders.filter(function(o){ return doneSet[o.id] || (o.folio&&doneSet[o.folio]) || o.status==='done'; }).length;
       var eff=tOrders.length?Math.round((tDone/tOrders.length)*100):0;
       return {id:t.id,name:t.name,orders:tOrders.length,done:tDone,eff:eff,spec:t.spec||''};
     })
@@ -1814,12 +1954,13 @@ function renderDashboard(){
 // ══════════════ ORDERS ══════════════
 function orderRow(o,actions){
   var cl=gClient(o.clientId),br=gBranch(o.branchId),tc=gTech(o.techId);
+  var orderLabel=o.folio||o.id;
   var act=actions?('<td><div style="display:flex;gap:4px;">'
     +'<button class="btn btn-ghost btn-sm btn-icon" onclick="openOrderM(\''+o.id+'\')"><i data-lucide="pencil"></i></button>'
     +'<button class="btn btn-danger btn-sm btn-icon" onclick="delOrder(\''+o.id+'\')"><i data-lucide="trash-2"></i></button>'
     +'</div></td>'):'';
   return '<tr>'
-    +'<td style="font-family:\'Syne\',sans-serif;font-size:12px;color:var(--accent);font-weight:700;">'+o.id+'</td>'
+    +'<td style="font-family:\'Syne\',sans-serif;font-size:12px;color:var(--accent);font-weight:700;">'+orderLabel+'</td>'
     +'<td style="font-weight:500;">'+o.type+'</td>'
     +'<td><div style="font-weight:500;">'+(cl?cl.name:'—')+'</div><div style="font-size:11px;color:var(--muted);">'+(br?br.name:'—')+'</div></td>'
     +'<td><div style="display:flex;align-items:center;gap:7px;"><div class="av" style="width:26px;height:26px;font-size:10px;background:'+techColor(o.techId)+';">'+(tc?initials(tc.name):'?')+'</div>'+(tc?tc.name:'—')+'</div></td>'
@@ -1847,22 +1988,65 @@ function openOrderM(id){
   openM('m-order');
 }
 function fillBranchSel(){ var cid=document.getElementById('o-client').value; document.getElementById('o-branch').innerHTML=DB.branches.filter(function(b){return b.clientId===cid;}).map(function(b){return'<option value="'+b.id+'">'+b.name+'</option>';}).join(''); }
-function saveOrder(){
-  var eid=document.getElementById('o-eid').value;
-  var data={type:document.getElementById('o-type').value,clientId:document.getElementById('o-client').value,branchId:document.getElementById('o-branch').value,techId:document.getElementById('o-tech').value,clId:document.getElementById('o-cl').value,priority:document.getElementById('o-prio').value,desc:document.getElementById('o-desc').value};
-  if(eid){
-    for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===eid){ Object.assign(DB.orders[i],data,{updatedAt:new Date().toISOString()}); break; }
-    toast('✅ Orden actualizada');
-  }
-  else{
-    var nowIso=new Date().toISOString();
-    var num='OT-'+String(DB.nextNum++).padStart(3,'0');
-    DB.orders.unshift(Object.assign({id:num,status:'pending',date:'Hoy',createdAt:nowIso,updatedAt:nowIso},data));
-    toast('✅ Orden '+num+' creada');
-  }
-  closeM('m-order'); renderOrders(); renderDashboard();
+function buildOrderFolio(){
+  return 'OT-'+String(Date.now()).slice(-8);
 }
-function delOrder(id){ confirm_('¿Eliminar la orden '+id+'?',function(){ DB.orders=DB.orders.filter(function(o){return o.id!==id;}); renderOrders(); renderDashboard(); toast('🗑️ Orden eliminada'); }); }
+async function saveOrder(){
+  var eid=document.getElementById('o-eid').value;
+  var existing=null;
+  if(eid){
+    for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===eid){ existing=DB.orders[i]; break; }
+  }
+  var nowLabel=new Date().toLocaleString('es-MX',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  var data={
+    id:eid||'',
+    folio:(existing&&existing.folio)||buildOrderFolio(),
+    type:document.getElementById('o-type').value,
+    clientId:document.getElementById('o-client').value,
+    branchId:document.getElementById('o-branch').value,
+    techId:document.getElementById('o-tech').value,
+    clId:document.getElementById('o-cl').value,
+    priority:document.getElementById('o-prio').value,
+    desc:document.getElementById('o-desc').value,
+    status:(existing&&existing.status)||'pending',
+    date:(existing&&existing.date)||nowLabel
+  };
+  if(typeof window.saveOrderToFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore para órdenes');
+    return;
+  }
+  try{
+    var savedMeta=await window.saveOrderToFirestore(data);
+    var localOrder=normalizeOrderDoc(Object.assign({},data,{id:(savedMeta&&savedMeta.id)||data.id}));
+    upsertLocalById(DB.orders,localOrder,true);
+    renderOrders(); renderDashboard(); renderTechs(); renderTechView();
+    closeM('m-order');
+    toast(eid?'✅ Orden actualizada':'✅ Orden '+data.folio+' creada');
+  }catch(err){
+    console.error('Error guardando orden:',err);
+    handleFirestoreSaveError(err,'❌ No se pudo guardar la orden');
+  }
+}
+function delOrder(id){
+  var order=null;
+  for(var i=0;i<DB.orders.length;i++) if(DB.orders[i].id===id){ order=DB.orders[i]; break; }
+  var orderLabel=order?(order.folio||order.id):id;
+  confirm_('¿Eliminar la orden '+orderLabel+'?',async function(){
+    if(typeof window.deleteOrderFromFirestore!=='function'){
+      toast('⚠️ Sin conexión con Firestore para eliminar');
+      return;
+    }
+    try{
+      await window.deleteOrderFromFirestore(id);
+      removeLocalById(DB.orders,id);
+      renderOrders(); renderDashboard(); renderTechs(); renderTechView();
+      toast('🗑️ Orden eliminada');
+    }catch(err){
+      console.error('Error eliminando orden:',err);
+      handleFirestoreSaveError(err,'❌ No se pudo eliminar la orden');
+    }
+  });
+}
 
 // ══════════════ CLIENTS ══════════════
 function renderClients(){
@@ -1875,8 +2059,64 @@ function renderClients(){
   renderLucideIcons();
 }
 function openClientM(id){ id=id||null; document.getElementById('c-eid').value=id||''; document.getElementById('m-client-ttl').textContent=id?'Editar Cliente':'Nuevo Cliente'; if(id){var c=gClient(id);if(c){document.getElementById('c-name').value=c.name;document.getElementById('c-contact').value=c.contact;document.getElementById('c-phone').value=c.phone;document.getElementById('c-email').value=c.email;document.getElementById('c-notes').value=c.notes;}}else{['c-name','c-contact','c-phone','c-email','c-notes'].forEach(function(f){document.getElementById(f).value='';});} openM('m-client'); }
-function saveClient(){ var eid=document.getElementById('c-eid').value; var data={name:document.getElementById('c-name').value.trim(),contact:document.getElementById('c-contact').value.trim(),phone:document.getElementById('c-phone').value.trim(),email:document.getElementById('c-email').value.trim(),notes:document.getElementById('c-notes').value.trim()}; if(!data.name){toast('⚠️ El nombre es requerido');return;} if(eid){for(var i=0;i<DB.clients.length;i++)if(DB.clients[i].id===eid){Object.assign(DB.clients[i],data);break;}toast('✅ Cliente actualizado');}else{DB.clients.push(Object.assign({id:uid()},data));toast('✅ Cliente agregado');} closeM('m-client'); renderClients(); }
-function delClient(id){ var c=gClient(id); confirm_('¿Eliminar "'+( c?c.name:'')+'"? Se eliminarán sus sucursales y equipos.',function(){ var bids=DB.branches.filter(function(b){return b.clientId===id;}).map(function(b){return b.id;}); DB.equipment=DB.equipment.filter(function(e){return bids.indexOf(e.branchId)===-1;}); DB.branches=DB.branches.filter(function(b){return b.clientId!==id;}); DB.clients=DB.clients.filter(function(c){return c.id!==id;}); renderClients(); toast('🗑️ Cliente eliminado'); }); }
+async function saveClient(){
+  var eid=document.getElementById('c-eid').value;
+  var data={
+    id:eid||'',
+    name:document.getElementById('c-name').value.trim(),
+    contact:document.getElementById('c-contact').value.trim(),
+    phone:document.getElementById('c-phone').value.trim(),
+    email:document.getElementById('c-email').value.trim(),
+    notes:document.getElementById('c-notes').value.trim()
+  };
+  if(!data.name){toast('⚠️ El nombre es requerido');return;}
+  if(typeof window.saveClientToFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore para clientes');
+    return;
+  }
+  try{
+    var savedMeta=await window.saveClientToFirestore(data);
+    upsertLocalById(DB.clients,normalizeClientDoc(Object.assign({},data,{id:(savedMeta&&savedMeta.id)||data.id})));
+    renderClients(); renderBranches(); renderOrders(); renderDashboard(); renderTechView();
+    closeM('m-client');
+    toast(eid?'✅ Cliente actualizado':'✅ Cliente agregado');
+  }catch(err){
+    console.error('Error guardando cliente:',err);
+    handleFirestoreSaveError(err,'❌ No se pudo guardar el cliente');
+  }
+}
+function delClient(id){
+  var c=gClient(id);
+  confirm_('¿Eliminar "'+( c?c.name:'')+'"? Se eliminarán sus sucursales y equipos.',async function(){
+    if(typeof window.deleteClientFromFirestore!=='function'){
+      toast('⚠️ Sin conexión con Firestore para eliminar');
+      return;
+    }
+    try{
+      var branchIds=DB.branches.filter(function(b){ return b.clientId===id; }).map(function(b){ return b.id; });
+      var equipmentIds=DB.equipment.filter(function(e){ return branchIds.indexOf(e.branchId)!==-1; }).map(function(e){ return e.id; });
+      if(typeof window.deleteEquipmentFromFirestore==='function'){
+        for(var ei=0;ei<equipmentIds.length;ei++){
+          await window.deleteEquipmentFromFirestore(equipmentIds[ei]);
+        }
+      }
+      if(typeof window.deleteBranchFromFirestore==='function'){
+        for(var bi=0;bi<branchIds.length;bi++){
+          await window.deleteBranchFromFirestore(branchIds[bi]);
+        }
+      }
+      await window.deleteClientFromFirestore(id);
+      removeLocalById(DB.clients,id);
+      for(var rbi=0;rbi<branchIds.length;rbi++){ removeLocalById(DB.branches,branchIds[rbi]); }
+      for(var rei=0;rei<equipmentIds.length;rei++){ removeLocalById(DB.equipment,equipmentIds[rei]); }
+      renderClients(); renderBranches(); renderEquipment(); renderOrders(); renderDashboard(); renderTechView();
+      toast('🗑️ Cliente eliminado');
+    }catch(err){
+      console.error('Error eliminando cliente:',err);
+      handleFirestoreSaveError(err,'❌ No se pudo eliminar el cliente');
+    }
+  });
+}
 
 // ══════════════ BRANCHES ══════════════
 function renderBranches(){
@@ -1944,12 +2184,14 @@ async function saveBranch(){
     return;
   }
   try{
-    await window.saveBranchToFirestore(data);
+    var savedMeta=await window.saveBranchToFirestore(data);
+    upsertLocalById(DB.branches,normalizeBranchDoc(Object.assign({},data,{id:(savedMeta&&savedMeta.id)||data.id})));
+    renderBranches(); renderEquipment(); renderOrders(); renderDashboard(); renderTechView();
     closeM('m-branch');
     toast(eid?'✅ Sucursal actualizada':'✅ Sucursal agregada');
   }catch(err){
     console.error('Error guardando sucursal:',err);
-    toast('❌ No se pudo guardar la sucursal');
+    handleFirestoreSaveError(err,'❌ No se pudo guardar la sucursal');
   }
 }
 
@@ -1961,13 +2203,20 @@ function delBranch(id){
       return;
     }
     try{
+      var equipmentIds=DB.equipment.filter(function(e){ return e.branchId===id; }).map(function(e){ return e.id; });
+      if(typeof window.deleteEquipmentFromFirestore==='function'){
+        for(var ei=0;ei<equipmentIds.length;ei++){
+          await window.deleteEquipmentFromFirestore(equipmentIds[ei]);
+        }
+      }
       await window.deleteBranchFromFirestore(id);
-      DB.equipment=DB.equipment.filter(function(e){return e.branchId!==id;});
-      renderEquipment();
+      removeLocalById(DB.branches,id);
+      for(var ri=0;ri<equipmentIds.length;ri++){ removeLocalById(DB.equipment,equipmentIds[ri]); }
+      renderBranches(); renderEquipment(); renderOrders(); renderDashboard(); renderTechView();
       toast('🗑️ Sucursal eliminada');
     }catch(err){
       console.error('Error eliminando sucursal:',err);
-      toast('❌ No se pudo eliminar la sucursal');
+      handleFirestoreSaveError(err,'❌ No se pudo eliminar la sucursal');
     }
   });
 }
@@ -1982,8 +2231,52 @@ function renderTechs(){
   renderLucideIcons();
 }
 function openTechM(id){ id=id||null; document.getElementById('t-eid').value=id||''; document.getElementById('m-tech-ttl').textContent=id?'Editar Técnico':'Nuevo Técnico'; if(id){var t=gTech(id);if(t){document.getElementById('t-name').value=t.name;document.getElementById('t-spec').value=t.spec;document.getElementById('t-phone').value=t.phone;document.getElementById('t-status').value=t.status;document.getElementById('t-notes').value=t.notes;}}else{['t-name','t-spec','t-phone','t-notes'].forEach(function(f){document.getElementById(f).value='';});document.getElementById('t-status').value='active';} openM('m-tech'); }
-function saveTech(){ var eid=document.getElementById('t-eid').value; var data={name:document.getElementById('t-name').value.trim(),spec:document.getElementById('t-spec').value.trim(),phone:document.getElementById('t-phone').value.trim(),status:document.getElementById('t-status').value,notes:document.getElementById('t-notes').value.trim()}; if(!data.name){toast('⚠️ El nombre es requerido');return;} if(eid){for(var i=0;i<DB.technicians.length;i++)if(DB.technicians[i].id===eid){Object.assign(DB.technicians[i],data);break;}toast('✅ Técnico actualizado');}else{DB.technicians.push(Object.assign({id:uid()},data));toast('✅ Técnico agregado');} closeM('m-tech'); renderTechs(); }
-function delTech(id){ var t=gTech(id); confirm_('¿Eliminar "'+( t?t.name:'')+'"?',function(){ DB.technicians=DB.technicians.filter(function(t){return t.id!==id;}); renderTechs(); toast('🗑️ Técnico eliminado'); }); }
+async function saveTech(){
+  var eid=document.getElementById('t-eid').value;
+  var existing=eid?gTech(eid):null;
+  var data={
+    id:eid||'',
+    name:document.getElementById('t-name').value.trim(),
+    email:String((existing&&existing.email)||'').trim(),
+    spec:document.getElementById('t-spec').value.trim(),
+    phone:document.getElementById('t-phone').value.trim(),
+    status:document.getElementById('t-status').value,
+    notes:document.getElementById('t-notes').value.trim()
+  };
+  if(!data.name){toast('⚠️ El nombre es requerido');return;}
+  if(typeof window.saveTechnicianToFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore para técnicos');
+    return;
+  }
+  try{
+    var savedMeta=await window.saveTechnicianToFirestore(data);
+    upsertLocalById(DB.technicians,normalizeTechnicianDoc(Object.assign({},data,{id:(savedMeta&&savedMeta.id)||data.id})));
+    renderTechs(); renderOrders(); renderDashboard(); renderTechView();
+    closeM('m-tech');
+    toast(eid?'✅ Técnico actualizado':'✅ Técnico agregado');
+  }catch(err){
+    console.error('Error guardando técnico:',err);
+    handleFirestoreSaveError(err,'❌ No se pudo guardar el técnico');
+  }
+}
+function delTech(id){
+  var t=gTech(id);
+  confirm_('¿Eliminar "'+( t?t.name:'')+'"?',async function(){
+    if(typeof window.deleteTechnicianFromFirestore!=='function'){
+      toast('⚠️ Sin conexión con Firestore para eliminar');
+      return;
+    }
+    try{
+      await window.deleteTechnicianFromFirestore(id);
+      removeLocalById(DB.technicians,id);
+      renderTechs(); renderOrders(); renderDashboard(); renderTechView();
+      toast('🗑️ Técnico eliminado');
+    }catch(err){
+      console.error('Error eliminando técnico:',err);
+      handleFirestoreSaveError(err,'❌ No se pudo eliminar el técnico');
+    }
+  });
+}
 
 // ══════════════ EQUIPMENT ══════════════
 function renderEquipment(){
@@ -1997,8 +2290,52 @@ function renderEquipment(){
   renderLucideIcons();
 }
 function openEquipM(id){ id=id||null; document.getElementById('e-eid').value=id||''; document.getElementById('m-equip-ttl').textContent=id?'Editar Equipo':'Nuevo Equipo'; document.getElementById('e-branch').innerHTML=DB.branches.map(function(b){var cl=gClient(b.clientId);return'<option value="'+b.id+'">'+b.name+(cl?' — '+cl.name:'')+'</option>';}).join(''); if(id){var e=null;for(var i=0;i<DB.equipment.length;i++)if(DB.equipment[i].id===id){e=DB.equipment[i];break;}if(e){document.getElementById('e-branch').value=e.branchId;document.getElementById('e-name').value=e.name;document.getElementById('e-type').value=e.type;document.getElementById('e-brand').value=e.brand;document.getElementById('e-model').value=e.model;document.getElementById('e-year').value=e.year;document.getElementById('e-status').value=e.status;document.getElementById('e-notes').value=e.notes;}}else{['e-name','e-brand','e-model','e-year','e-notes'].forEach(function(f){document.getElementById(f).value='';});document.getElementById('e-status').value='active';} openM('m-equip'); }
-function saveEquip(){ var eid=document.getElementById('e-eid').value; var data={branchId:document.getElementById('e-branch').value,name:document.getElementById('e-name').value.trim(),type:document.getElementById('e-type').value,brand:document.getElementById('e-brand').value.trim(),model:document.getElementById('e-model').value.trim(),year:document.getElementById('e-year').value,status:document.getElementById('e-status').value,notes:document.getElementById('e-notes').value.trim()}; if(!data.name){toast('⚠️ El nombre es requerido');return;} if(eid){for(var i=0;i<DB.equipment.length;i++)if(DB.equipment[i].id===eid){Object.assign(DB.equipment[i],data);break;}toast('✅ Equipo actualizado');}else{DB.equipment.push(Object.assign({id:uid()},data));toast('✅ Equipo agregado');} closeM('m-equip'); renderEquipment(); }
-function delEquip(id){ confirm_('¿Eliminar este equipo?',function(){ DB.equipment=DB.equipment.filter(function(e){return e.id!==id;}); renderEquipment(); toast('🗑️ Equipo eliminado'); }); }
+async function saveEquip(){
+  var eid=document.getElementById('e-eid').value;
+  var data={
+    id:eid||'',
+    branchId:document.getElementById('e-branch').value,
+    name:document.getElementById('e-name').value.trim(),
+    type:document.getElementById('e-type').value,
+    brand:document.getElementById('e-brand').value.trim(),
+    model:document.getElementById('e-model').value.trim(),
+    year:document.getElementById('e-year').value,
+    status:document.getElementById('e-status').value,
+    notes:document.getElementById('e-notes').value.trim()
+  };
+  if(!data.name){toast('⚠️ El nombre es requerido');return;}
+  if(typeof window.saveEquipmentToFirestore!=='function'){
+    toast('⚠️ Sin conexión con Firestore para equipos');
+    return;
+  }
+  try{
+    var savedMeta=await window.saveEquipmentToFirestore(data);
+    upsertLocalById(DB.equipment,normalizeEquipmentDoc(Object.assign({},data,{id:(savedMeta&&savedMeta.id)||data.id})));
+    renderEquipment(); renderBranches();
+    closeM('m-equip');
+    toast(eid?'✅ Equipo actualizado':'✅ Equipo agregado');
+  }catch(err){
+    console.error('Error guardando equipo:',err);
+    handleFirestoreSaveError(err,'❌ No se pudo guardar el equipo');
+  }
+}
+function delEquip(id){
+  confirm_('¿Eliminar este equipo?',async function(){
+    if(typeof window.deleteEquipmentFromFirestore!=='function'){
+      toast('⚠️ Sin conexión con Firestore para eliminar');
+      return;
+    }
+    try{
+      await window.deleteEquipmentFromFirestore(id);
+      removeLocalById(DB.equipment,id);
+      renderEquipment(); renderBranches();
+      toast('🗑️ Equipo eliminado');
+    }catch(err){
+      console.error('Error eliminando equipo:',err);
+      handleFirestoreSaveError(err,'❌ No se pudo eliminar el equipo');
+    }
+  });
+}
 
 // ══════════════ CHECKLIST BUILDER ══════════════
 function renderChecklists(){
@@ -2248,12 +2585,14 @@ async function saveCl(){
     return;
   }
   try{
-    await window.saveChecklistToFirestore(data);
+    var savedMeta=await window.saveChecklistToFirestore(data);
+    upsertLocalById(DB.checklists,normalizeChecklistDoc(Object.assign({},data,{id:(savedMeta&&savedMeta.id)||data.id})));
+    renderChecklists(); renderTechChecklistPage();
     closeM('m-cl');
     toast(eid?'✅ Check-list actualizado':'✅ Check-list creado');
   }catch(err){
     console.error('Error guardando checklist en Firestore:',err);
-    toast('❌ No se pudo guardar el check-list');
+    handleFirestoreSaveError(err,'❌ No se pudo guardar el check-list');
   }
 }
 function delCl(id){ confirm_('¿Eliminar este check-list?',async function(){
@@ -2263,26 +2602,31 @@ function delCl(id){ confirm_('¿Eliminar este check-list?',async function(){
   }
   try{
     await window.deleteChecklistFromFirestore(id);
+    removeLocalById(DB.checklists,id);
+    renderChecklists(); renderTechChecklistPage();
     toast('🗑️ Check-list eliminado');
   }catch(err){
     console.error('Error eliminando checklist:',err);
-    toast('❌ No se pudo eliminar el check-list');
+    handleFirestoreSaveError(err,'❌ No se pudo eliminar el check-list');
   }
 }); }
 
 async function toggleChecklistPublished(id){
   var cl=gCl(id);
   if(!cl){ toast('⚠️ Checklist no encontrado'); return; }
+  var nextPublished=!cl.published;
   if(typeof window.setChecklistPublishedInFirestore!=='function'){
     toast('⚠️ Sin conexión con Firestore');
     return;
   }
   try{
-    await window.setChecklistPublishedInFirestore(id,!cl.published);
-    toast(!cl.published?'✅ Checklist publicado':'✅ Checklist despublicado');
+    await window.setChecklistPublishedInFirestore(id,nextPublished);
+    cl.published=nextPublished;
+    renderChecklists(); renderTechChecklistPage();
+    toast(nextPublished?'✅ Checklist publicado':'✅ Checklist despublicado');
   }catch(err){
     console.error('Error cambiando publicación:',err);
-    toast('❌ No se pudo actualizar estado de publicación');
+    handleFirestoreSaveError(err,'❌ No se pudo actualizar estado de publicación');
   }
 }
 
@@ -2461,8 +2805,15 @@ function openTechChecklistWork(checklistId){
 function renderTechView(){
   var sel=document.getElementById('tv-sel'),prev=sel.value;
   sel.innerHTML=DB.technicians.filter(function(t){return t.status==='active';}).map(function(t){return'<option value="'+t.id+'">'+t.name+'</option>';}).join('');
+  if(!sel.innerHTML){
+    sel.innerHTML='<option value="">Sin técnicos</option>';
+    document.getElementById('tv-list').innerHTML='<div class="empty"><div class="empty-ico"><i data-lucide="users"></i></div>No hay técnicos disponibles</div>';
+    renderLucideIcons();
+    return;
+  }
   var found=false; for(var i=0;i<DB.technicians.length;i++) if(DB.technicians[i].id===prev){found=true;break;}
   if(found) sel.value=prev;
+  if(!sel.value && DB.technicians.length) sel.value=DB.technicians[0].id;
   switchTech(sel.value);
   renderTechLiveGpsPanel();
 }
@@ -2479,8 +2830,9 @@ function switchTech(tid){
   var myOrders=DB.orders.filter(function(o){return o.techId===tid&&o.status!=='done';});
   var html=myOrders.map(function(o){
     var cl=gClient(o.clientId),br=gBranch(o.branchId),lbl=o.status==='pending'?'Pendiente':'En Progreso',cls=o.status==='pending'?'b-pend':'b-prog';
+    var orderLabel=o.folio||o.id;
     return'<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:border-color .15s;" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'" onclick="openWork(\''+o.id+'\')">'
-      +'<div style="font-family:\'Syne\',sans-serif;font-size:11px;color:var(--accent);font-weight:700;min-width:52px;">'+o.id+'</div>'
+      +'<div style="font-family:\'Syne\',sans-serif;font-size:11px;color:var(--accent);font-weight:700;min-width:52px;">'+orderLabel+'</div>'
       +'<div style="flex:1;"><div style="font-weight:500;font-size:14px;">'+o.type+'</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">'+(cl?cl.name:'—')+' · '+(br?br.name:'—')+'</div></div>'
       +'<span class="badge '+cls+'">'+lbl+'</span></div>';
   }).join('');
@@ -2503,7 +2855,7 @@ function openWork(id){
   curOrderId=id;
   notifyLiveTrackingContext();
   var cl=gClient(o.clientId),br=gBranch(o.branchId),ck=gCl(o.clId);
-  document.getElementById('wd-id').textContent=o.id;
+  document.getElementById('wd-id').textContent=o.folio||o.id;
   document.getElementById('wd-name').textContent=o.type;
   document.getElementById('wd-loc').textContent=(cl?cl.name:'—')+' — '+(br?br.name:'—');
 
@@ -2516,9 +2868,14 @@ function openWork(id){
   clearSig();
   updateProg();
   o.status='progress';
+  if(typeof window.updateOrderStatusInFirestore==='function'){
+    Promise.resolve(window.updateOrderStatusInFirestore(o.id,'progress')).catch(function(err){
+      console.warn('No se pudo marcar orden en progreso en Firestore:',err);
+    });
+  }
   document.getElementById('wd-wrap').style.display='block';
   setTimeout(function(){ document.getElementById('wd-wrap').scrollIntoView({behavior:'smooth'}); },80);
-  toast('📋 Orden '+id+' abierta');
+  toast('📋 Orden '+(o.folio||id)+' abierta');
   renderDashboard();
 }
 
@@ -4098,7 +4455,7 @@ async function closeOrder(){
   if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
   var reportMeta=extractBrisamReportMeta(captured.respuestas,captured.observaciones||(!isFree&&o?o.desc:''));
   var signatureData=document.getElementById('sig-c').toDataURL('image/png');
-  var reportFolio=isFree?generatedFolio:o.id;
+  var reportFolio=isFree?generatedFolio:(o.folio||o.id);
   var checklistTemplateType=resolvePdfTemplateType({
     templateType:ck&&ck.templateType,
     checklistNombre:ck&&ck.name,
@@ -4125,7 +4482,7 @@ async function closeOrder(){
 
     console.log('[closeOrder] Inicio de subida. Imágenes:',imagenes.length);
     var urls=await Promise.all(imagenes.map(async function(img){
-      var uploadOrderId=isFree?generatedFolio:o.id;
+      var uploadOrderId=isFree?generatedFolio:(o.folio||o.id);
       var url=await window.uploadEvidenceImage(img.file,{orderId:uploadOrderId,slotIndex:img.slotIndex});
       if(pendingPhotos[img.slotIndex]) pendingPhotos[img.slotIndex].url=url;
       console.log('[closeOrder] Imagen subida slot',img.slotIndex,'url:',url);
@@ -4249,6 +4606,9 @@ async function closeOrder(){
       ? {id:generatedFolio,type:'Checklist libre',clientId:'',branchId:'',techId:tc?tc.id:'',clId:ck?ck.id:'',desc:captured.observaciones||''}
       : o;
     if(!isFree){
+      if(typeof window.updateOrderStatusInFirestore==='function'){
+        await window.updateOrderStatusInFirestore(o.id,'done');
+      }
       o.status='done';
     }else{
       currentWorkMode='order';
@@ -4279,6 +4639,7 @@ async function closeOrder(){
 
 function buildReport(o,locationData){
   var cl=gClient(o.clientId),br=gBranch(o.branchId),tc=gTech(o.techId),ck=gCl(o.clId);
+  var orderLabel=(o&&o.folio)?o.folio:o.id;
   var now=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
   var locLabel=(locationData && typeof locationData.lat==='number' && typeof locationData.lng==='number')
     ? (locationData.lat.toFixed(5)+', '+locationData.lng.toFixed(5)+(locationData.accuracy?(' ('+locationData.accuracy+'m)'):''))
@@ -4327,7 +4688,7 @@ function buildReport(o,locationData){
     +'<div class="rdiv"></div>'
     +'<div class="rst">Información de la Orden</div>'
     +'<div class="rgrid">'
-    +'<div class="rf"><div class="rfl">No. Orden</div><div class="rfv">'+o.id+'</div></div>'
+    +'<div class="rf"><div class="rfl">No. Orden</div><div class="rfv">'+orderLabel+'</div></div>'
     +'<div class="rf"><div class="rfl">Tipo</div><div class="rfv">'+o.type+'</div></div>'
     +'<div class="rf"><div class="rfl">Cliente</div><div class="rfv">'+(cl?cl.name:'—')+'</div></div>'
     +'<div class="rf"><div class="rfl">Sucursal</div><div class="rfv">'+(br?br.name:'—')+'</div></div>'
@@ -4342,7 +4703,7 @@ function buildReport(o,locationData){
     +'<div class="rdiv"></div>'
     +'<div class="rst">Firma de conformidad</div>'
     +'<div class="rsig"><img src="'+sigData+'" style="height:55px;max-width:100%;"><div class="rsig-lbl">Responsable en sucursal — '+(br?br.name:'—')+'</div></div>'
-    +'<div class="rfoot"><div class="rfoot-brand">MantenPro</div><div class="rfoot-meta">Generado: '+now+' · '+o.id+'</div></div>'
+    +'<div class="rfoot"><div class="rfoot-brand">MantenPro</div><div class="rfoot-meta">Generado: '+now+' · '+orderLabel+'</div></div>'
     +'</div>';
 }
 

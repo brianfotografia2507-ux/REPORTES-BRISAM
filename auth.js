@@ -74,6 +74,10 @@ var LIVE_LOCATION_PULSE_MS = 20000;
 var adminLiveLocationsUnsubscribe = null;
 var checklistUnsubscribe = null;
 var branchesUnsubscribe = null;
+var clientsUnsubscribe = null;
+var equipmentUnsubscribe = null;
+var ordersUnsubscribe = null;
+var techniciansUnsubscribe = null;
 
 function withTimeout(promise, ms, label) {
   return new Promise(function (resolve, reject) {
@@ -265,6 +269,10 @@ async function loadUserState(user) {
     stopAdminLiveLocationsSubscription();
     stopChecklistSubscription();
     stopBranchesSubscription();
+    stopClientsSubscription();
+    stopEquipmentSubscription();
+    stopOrdersSubscription();
+    stopTechniciansSubscription();
     emitLiveLocationUiState({
       active: false,
       connection: "Sin sesión",
@@ -291,6 +299,10 @@ async function loadUserState(user) {
     goRoleLanding(role);
     startChecklistSubscription(role);
     startBranchesSubscription();
+    startClientsSubscription();
+    startEquipmentSubscription();
+    startOrdersSubscription(role);
+    startTechniciansSubscription(role);
     if (role === "tecnico") {
       stopAdminLiveLocationsSubscription();
       startLiveLocationTracking(user, profile || {}).catch(function (err) {
@@ -312,6 +324,10 @@ async function loadUserState(user) {
     stopAdminLiveLocationsSubscription();
     stopChecklistSubscription();
     stopBranchesSubscription();
+    stopClientsSubscription();
+    stopEquipmentSubscription();
+    stopOrdersSubscription();
+    stopTechniciansSubscription();
     await signOut(auth);
     setAuthMessage("No fue posible cargar el perfil del usuario.", "error");
   }
@@ -532,6 +548,50 @@ function stopBranchesSubscription() {
   }
 }
 
+function stopClientsSubscription() {
+  if (clientsUnsubscribe) {
+    try {
+      clientsUnsubscribe();
+    } catch (err) {
+      console.warn("Error cerrando suscripción clients:", err);
+    }
+    clientsUnsubscribe = null;
+  }
+}
+
+function stopEquipmentSubscription() {
+  if (equipmentUnsubscribe) {
+    try {
+      equipmentUnsubscribe();
+    } catch (err) {
+      console.warn("Error cerrando suscripción equipment:", err);
+    }
+    equipmentUnsubscribe = null;
+  }
+}
+
+function stopOrdersSubscription() {
+  if (ordersUnsubscribe) {
+    try {
+      ordersUnsubscribe();
+    } catch (err) {
+      console.warn("Error cerrando suscripción orders:", err);
+    }
+    ordersUnsubscribe = null;
+  }
+}
+
+function stopTechniciansSubscription() {
+  if (techniciansUnsubscribe) {
+    try {
+      techniciansUnsubscribe();
+    } catch (err) {
+      console.warn("Error cerrando suscripción technicians:", err);
+    }
+    techniciansUnsubscribe = null;
+  }
+}
+
 function normalizeBranchNumber(value) {
   if (typeof value === "number" && isFinite(value)) return value;
   var parsed = Number(value);
@@ -654,6 +714,225 @@ function startChecklistSubscription(role) {
       if (typeof window.toast === "function" && currentRole === "administrador") {
         window.toast("⚠️ No se pudieron sincronizar checklists");
       }
+    }
+  );
+}
+
+function emitClientDocs(clientDocs) {
+  if (typeof window.setFirestoreClientsData === "function") {
+    try {
+      window.setFirestoreClientsData(clientDocs);
+    } catch (err) {
+      console.warn("No se pudo actualizar clients en UI:", err);
+    }
+  }
+}
+
+function mapClientDoc(snap) {
+  var data = (snap && typeof snap.data === "function" ? snap.data() : {}) || {};
+  return {
+    id: snap.id,
+    name: String(data.name || "").trim() || "Cliente",
+    contact: String(data.contact || "").trim(),
+    phone: String(data.phone || "").trim(),
+    email: String(data.email || "").trim(),
+    notes: String(data.notes || "").trim(),
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null,
+    createdBy: data.createdBy || "",
+  };
+}
+
+function startClientsSubscription() {
+  if (!firebaseAvailable || !db || !auth.currentUser) return;
+  stopClientsSubscription();
+  clientsUnsubscribe = onSnapshot(
+    collection(db, "clients"),
+    function (snap) {
+      var docs = [];
+      snap.forEach(function (item) {
+        docs.push(mapClientDoc(item));
+      });
+      emitClientDocs(docs);
+    },
+    function (err) {
+      console.error("Error sincronizando clients:", err);
+      if (typeof window.toast === "function" && currentRole === "administrador") {
+        window.toast("⚠️ No se pudieron sincronizar clientes");
+      }
+    }
+  );
+}
+
+function emitEquipmentDocs(equipmentDocs) {
+  if (typeof window.setFirestoreEquipmentData === "function") {
+    try {
+      window.setFirestoreEquipmentData(equipmentDocs);
+    } catch (err) {
+      console.warn("No se pudo actualizar equipment en UI:", err);
+    }
+  }
+}
+
+function mapEquipmentDoc(snap) {
+  var data = (snap && typeof snap.data === "function" ? snap.data() : {}) || {};
+  return {
+    id: snap.id,
+    branchId: String(data.branchId || "").trim(),
+    name: String(data.name || "").trim() || "Equipo",
+    type: String(data.type || "").trim() || "General",
+    brand: String(data.brand || "").trim(),
+    model: String(data.model || "").trim(),
+    year: String(data.year || "").trim(),
+    status: data.status === "inactive" ? "inactive" : "active",
+    notes: String(data.notes || "").trim(),
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null,
+    createdBy: data.createdBy || "",
+  };
+}
+
+function startEquipmentSubscription() {
+  if (!firebaseAvailable || !db || !auth.currentUser) return;
+  stopEquipmentSubscription();
+  equipmentUnsubscribe = onSnapshot(
+    collection(db, "equipment"),
+    function (snap) {
+      var docs = [];
+      snap.forEach(function (item) {
+        docs.push(mapEquipmentDoc(item));
+      });
+      emitEquipmentDocs(docs);
+    },
+    function (err) {
+      console.error("Error sincronizando equipment:", err);
+      if (typeof window.toast === "function" && currentRole === "administrador") {
+        window.toast("⚠️ No se pudieron sincronizar equipos");
+      }
+    }
+  );
+}
+
+function emitOrderDocs(orderDocs) {
+  if (typeof window.setFirestoreOrdersData === "function") {
+    try {
+      window.setFirestoreOrdersData(orderDocs);
+    } catch (err) {
+      console.warn("No se pudo actualizar orders en UI:", err);
+    }
+  }
+}
+
+function mapOrderDoc(snap) {
+  var data = (snap && typeof snap.data === "function" ? snap.data() : {}) || {};
+  var rawStatus = String(data.status || "").trim().toLowerCase();
+  var status = "pending";
+  if (rawStatus === "progress" || rawStatus === "done") {
+    status = rawStatus;
+  }
+  return {
+    id: snap.id,
+    folio: String(data.folio || "").trim(),
+    type: String(data.type || "").trim() || "Orden de trabajo",
+    clientId: String(data.clientId || "").trim(),
+    branchId: String(data.branchId || "").trim(),
+    techId: String(data.techId || "").trim(),
+    clId: String(data.clId || "").trim(),
+    priority: String(data.priority || "").trim() || "Normal",
+    desc: String(data.desc || "").trim(),
+    status: status,
+    date: String(data.date || "").trim(),
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null,
+    createdBy: data.createdBy || "",
+  };
+}
+
+function startOrdersSubscription(role) {
+  if (!firebaseAvailable || !db || !auth.currentUser) return;
+  stopOrdersSubscription();
+  var source =
+    role === "administrador"
+      ? collection(db, "orders")
+      : query(collection(db, "orders"), where("techId", "==", auth.currentUser.uid));
+  ordersUnsubscribe = onSnapshot(
+    source,
+    function (snap) {
+      var docs = [];
+      snap.forEach(function (item) {
+        docs.push(mapOrderDoc(item));
+      });
+      emitOrderDocs(docs);
+    },
+    function (err) {
+      console.error("Error sincronizando orders:", err);
+      if (typeof window.toast === "function") {
+        window.toast("⚠️ No se pudieron sincronizar órdenes");
+      }
+    }
+  );
+}
+
+function emitTechnicianDocs(technicianDocs) {
+  if (typeof window.setFirestoreTechniciansData === "function") {
+    try {
+      window.setFirestoreTechniciansData(technicianDocs);
+    } catch (err) {
+      console.warn("No se pudo actualizar technicians en UI:", err);
+    }
+  }
+}
+
+function mapTechnicianDoc(snap) {
+  var data = (snap && typeof snap.data === "function" ? snap.data() : {}) || {};
+  return {
+    id: snap.id,
+    name: String(data.name || data.displayName || "").trim() || "Técnico",
+    email: String(data.email || "").trim(),
+    phone: String(data.phone || "").trim(),
+    spec: String(data.spec || "").trim(),
+    status: data.status === "inactive" ? "inactive" : "active",
+    notes: String(data.notes || "").trim(),
+    role: String(data.role || "").trim(),
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null,
+    createdBy: data.createdBy || "",
+  };
+}
+
+function startTechniciansSubscription(role) {
+  if (!firebaseAvailable || !db || !auth.currentUser) return;
+  stopTechniciansSubscription();
+  if (role === "administrador") {
+    techniciansUnsubscribe = onSnapshot(
+      query(collection(db, "users"), where("role", "==", "tecnico")),
+      function (snap) {
+        var docs = [];
+        snap.forEach(function (item) {
+          docs.push(mapTechnicianDoc(item));
+        });
+        emitTechnicianDocs(docs);
+      },
+      function (err) {
+        console.error("Error sincronizando users/technicians:", err);
+        if (typeof window.toast === "function") {
+          window.toast("⚠️ No se pudieron sincronizar técnicos");
+        }
+      }
+    );
+    return;
+  }
+  techniciansUnsubscribe = onSnapshot(
+    doc(db, "users", auth.currentUser.uid),
+    function (snap) {
+      var docs = [];
+      if (snap && snap.exists && snap.exists()) {
+        docs.push(mapTechnicianDoc(snap));
+      }
+      emitTechnicianDocs(docs);
+    },
+    function (err) {
+      console.error("Error sincronizando perfil técnico:", err);
     }
   );
 }
@@ -808,6 +1087,10 @@ window.logoutUser = async function logoutUser() {
     stopAdminLiveLocationsSubscription();
     stopChecklistSubscription();
     stopBranchesSubscription();
+    stopClientsSubscription();
+    stopEquipmentSubscription();
+    stopOrdersSubscription();
+    stopTechniciansSubscription();
     await signOut(auth);
   }
 };
@@ -918,6 +1201,228 @@ window.deleteBranchFromFirestore = async function deleteBranchFromFirestore(id) 
   if (!safeId) throw new Error("Sucursal inválida.");
   await deleteDoc(doc(db, "branches", safeId));
   return { id: safeId };
+};
+
+window.saveTechnicianToFirestore = async function saveTechnicianToFirestore(techData) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden guardar técnicos.");
+  }
+  var payload = Object.assign({}, techData || {});
+  var name = String(payload.name || "").trim();
+  if (!name) throw new Error("El nombre del técnico es obligatorio.");
+  var data = {
+    name: name,
+    role: "tecnico",
+    email: String(payload.email || "").trim().toLowerCase(),
+    spec: String(payload.spec || "").trim(),
+    phone: String(payload.phone || "").trim(),
+    status: payload.status === "inactive" ? "inactive" : "active",
+    notes: String(payload.notes || "").trim(),
+    updatedAt: serverTimestamp(),
+  };
+  var id = String(payload.id || "").trim();
+  if (id) {
+    await setDoc(doc(db, "users", id), data, { merge: true });
+    return { id: id, updated: true };
+  }
+  data.createdAt = serverTimestamp();
+  data.createdBy = resolved.user.uid;
+  var created = await addDoc(collection(db, "users"), data);
+  return { id: created.id, updated: false };
+};
+
+window.deleteTechnicianFromFirestore = async function deleteTechnicianFromFirestore(id) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden eliminar técnicos.");
+  }
+  var safeId = String(id || "").trim();
+  if (!safeId) throw new Error("Técnico inválido.");
+  await deleteDoc(doc(db, "users", safeId));
+  return { id: safeId };
+};
+
+window.saveClientToFirestore = async function saveClientToFirestore(clientData) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden guardar clientes.");
+  }
+  var payload = Object.assign({}, clientData || {});
+  var name = String(payload.name || "").trim();
+  if (!name) throw new Error("El nombre del cliente es obligatorio.");
+  var data = {
+    name: name,
+    contact: String(payload.contact || "").trim(),
+    phone: String(payload.phone || "").trim(),
+    email: String(payload.email || "").trim(),
+    notes: String(payload.notes || "").trim(),
+    updatedAt: serverTimestamp(),
+  };
+  var id = String(payload.id || "").trim();
+  if (id) {
+    await setDoc(doc(db, "clients", id), data, { merge: true });
+    return { id: id, updated: true };
+  }
+  data.createdAt = serverTimestamp();
+  data.createdBy = resolved.user.uid;
+  var created = await addDoc(collection(db, "clients"), data);
+  return { id: created.id, updated: false };
+};
+
+window.deleteClientFromFirestore = async function deleteClientFromFirestore(id) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden eliminar clientes.");
+  }
+  var safeId = String(id || "").trim();
+  if (!safeId) throw new Error("Cliente inválido.");
+  await deleteDoc(doc(db, "clients", safeId));
+  return { id: safeId };
+};
+
+window.saveEquipmentToFirestore = async function saveEquipmentToFirestore(equipmentData) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden guardar equipos.");
+  }
+  var payload = Object.assign({}, equipmentData || {});
+  var name = String(payload.name || "").trim();
+  if (!name) throw new Error("El nombre del equipo es obligatorio.");
+  var data = {
+    branchId: String(payload.branchId || "").trim(),
+    name: name,
+    type: String(payload.type || "").trim() || "General",
+    brand: String(payload.brand || "").trim(),
+    model: String(payload.model || "").trim(),
+    year: String(payload.year || "").trim(),
+    status: payload.status === "inactive" ? "inactive" : "active",
+    notes: String(payload.notes || "").trim(),
+    updatedAt: serverTimestamp(),
+  };
+  var id = String(payload.id || "").trim();
+  if (id) {
+    await setDoc(doc(db, "equipment", id), data, { merge: true });
+    return { id: id, updated: true };
+  }
+  data.createdAt = serverTimestamp();
+  data.createdBy = resolved.user.uid;
+  var created = await addDoc(collection(db, "equipment"), data);
+  return { id: created.id, updated: false };
+};
+
+window.deleteEquipmentFromFirestore = async function deleteEquipmentFromFirestore(id) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden eliminar equipos.");
+  }
+  var safeId = String(id || "").trim();
+  if (!safeId) throw new Error("Equipo inválido.");
+  await deleteDoc(doc(db, "equipment", safeId));
+  return { id: safeId };
+};
+
+function normalizeOrderStatus(status) {
+  var raw = String(status || "")
+    .trim()
+    .toLowerCase();
+  if (raw === "progress" || raw === "done") return raw;
+  return "pending";
+}
+
+window.saveOrderToFirestore = async function saveOrderToFirestore(orderData) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden guardar órdenes.");
+  }
+  var payload = Object.assign({}, orderData || {});
+  var data = {
+    folio: String(payload.folio || "").trim(),
+    type: String(payload.type || "").trim() || "Orden de trabajo",
+    clientId: String(payload.clientId || "").trim(),
+    branchId: String(payload.branchId || "").trim(),
+    techId: String(payload.techId || "").trim(),
+    clId: String(payload.clId || "").trim(),
+    priority: String(payload.priority || "").trim() || "Normal",
+    desc: String(payload.desc || "").trim(),
+    status: normalizeOrderStatus(payload.status),
+    date: String(payload.date || "").trim(),
+    updatedAt: serverTimestamp(),
+  };
+  var id = String(payload.id || "").trim();
+  if (id) {
+    await setDoc(doc(db, "orders", id), data, { merge: true });
+    return { id: id, updated: true };
+  }
+  data.createdAt = serverTimestamp();
+  data.createdBy = resolved.user.uid;
+  var created = await addDoc(collection(db, "orders"), data);
+  return { id: created.id, updated: false };
+};
+
+window.deleteOrderFromFirestore = async function deleteOrderFromFirestore(id) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden eliminar órdenes.");
+  }
+  var safeId = String(id || "").trim();
+  if (!safeId) throw new Error("Orden inválida.");
+  await deleteDoc(doc(db, "orders", safeId));
+  return { id: safeId };
+};
+
+window.updateOrderStatusInFirestore = async function updateOrderStatusInFirestore(id, status) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  var safeId = String(id || "").trim();
+  if (!safeId) throw new Error("Orden inválida.");
+  var normalizedStatus = normalizeOrderStatus(status);
+  if (resolved.profile.role !== "administrador") {
+    if (resolved.profile.role !== "tecnico") {
+      throw new Error("Sin permisos para actualizar orden.");
+    }
+    var orderSnap = await getDoc(doc(db, "orders", safeId));
+    if (!orderSnap.exists()) throw new Error("Orden no encontrada.");
+    var assignedTechId = String((orderSnap.data() || {}).techId || "").trim();
+    if (assignedTechId !== resolved.user.uid) {
+      throw new Error("No puedes actualizar una orden de otro técnico.");
+    }
+  }
+  await setDoc(
+    doc(db, "orders", safeId),
+    {
+      status: normalizedStatus,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return { id: safeId, status: normalizedStatus };
 };
 
 function cloneChecklistSections(sections) {
