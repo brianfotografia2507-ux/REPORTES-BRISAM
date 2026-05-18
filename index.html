@@ -4480,7 +4480,7 @@ async function closeOrder(){
       throw new Error('uploadEvidenceImage no está disponible');
     }
 
-    console.log('[closeOrder] Inicio de subida. Imágenes:',imagenes.length);
+    console.log('Fotos a subir:',imagenes.length);
     var urls=await Promise.all(imagenes.map(async function(img){
       var uploadOrderId=isFree?generatedFolio:(o.folio||o.id);
       var url=await window.uploadEvidenceImage(img.file,{orderId:uploadOrderId,slotIndex:img.slotIndex});
@@ -4488,13 +4488,51 @@ async function closeOrder(){
       console.log('[closeOrder] Imagen subida slot',img.slotIndex,'url:',url);
       return url;
     }));
-    console.log('[closeOrder] Fin de subida. URLs:',urls.length);
+    console.log('Fotos subidas:',urls.length);
+    console.log('URLs generadas:',urls);
 
-    if(isFree){
-      if(typeof window.saveChecklistReportToFirestore!=='function'){
-        throw new Error('saveChecklistReportToFirestore no está disponible');
+    if(typeof window.saveReportToFirestore!=='function'){
+      throw new Error('saveReportToFirestore no está disponible');
+    }
+    var reportData={
+      ordenId:reportFolio,
+      folio:reportFolio,
+      tecnicoId:isFree?(tc?tc.id:''):(o?o.techId:''),
+      tecnicoNombre:tc?tc.name:'',
+      clienteNombre:isFree?(reportMeta.cliente||'Checklist libre'):(cl?cl.name:(reportMeta.cliente||'')),
+      sucursalNombre:isFree?(reportMeta.sucursal||'No especificado'):(br?br.name:(reportMeta.sucursal||'')),
+      gerenteTurno:reportMeta.gerente||'',
+      checklist:{id:ck?ck.id:'',name:ck?ck.name:'—'},
+      checklistNombre:ck?ck.name:'—',
+      checklistType:ck?ck.type:'',
+      templateType:checklistTemplateType,
+      tipoMantenimiento:isFree?('Checklist libre · '+(ck?ck.type:'General')):(o.type||''),
+      fallaReportada:reportMeta.falla||'',
+      servicioRealizado:finalServicio||'',
+      materiales:reportMeta.materiales||'',
+      respuestas:captured.respuestas,
+      observaciones:finalObservaciones,
+      firmaTecnico:signatureData,
+      firmaGerente:reportMeta.firmaGerente||'',
+      fotos:urls,
+      ubicacion:{
+        lat:locationData.lat,
+        lng:locationData.lng,
+        accuracy:locationData.accuracy||0,
+        direccionAprox:locationData.address||'',
+        capturedAt:locationData.capturedAt||new Date().toISOString(),
+        source:'navigator.geolocation'
       }
-      console.log('[closeOrder] Guardando checklist libre en Firestore');
+    };
+    console.log('Guardando reporte en Firestore:',{
+      ordenId:reportData.ordenId,
+      checklistNombre:reportData.checklistNombre,
+      fotos:reportData.fotos.length
+    });
+    var savedReportMeta=await window.saveReportToFirestore(reportData);
+    console.log('Reporte guardado ID:',savedReportMeta&&savedReportMeta.id?savedReportMeta.id:'');
+
+    if(isFree && typeof window.saveChecklistReportToFirestore==='function'){
       await window.saveChecklistReportToFirestore({
         checklistId:ck.id,
         checklistName:ck.name,
@@ -4519,44 +4557,12 @@ async function closeOrder(){
         signatureData:signatureData,
         managerSignatureData:reportMeta.firmaGerente||''
       });
-      console.log('[closeOrder] Checklist libre guardado correctamente');
-    }else{
-      if(typeof window.saveReportToFirestore!=='function'){
-        throw new Error('saveReportToFirestore no está disponible');
-      }
-      var reportData={
-        ordenId:reportFolio,
-        folio:reportFolio,
-        tecnicoId:o.techId,
-        tecnicoNombre:tc?tc.name:'',
-        clienteNombre:cl?cl.name:(reportMeta.cliente||''),
-        sucursalNombre:br?br.name:(reportMeta.sucursal||''),
-        gerenteTurno:reportMeta.gerente||'',
-        checklist:{id:o.clId,name:ck?ck.name:'—'},
-        checklistNombre:ck?ck.name:'—',
-        checklistType:ck?ck.type:'',
-        templateType:checklistTemplateType,
-        tipoMantenimiento:o.type||'',
-        fallaReportada:reportMeta.falla||'',
-        servicioRealizado:finalServicio||'',
-        materiales:reportMeta.materiales||'',
-        respuestas:captured.respuestas,
-        observaciones:finalObservaciones,
-        firmaTecnico:signatureData,
-        firmaGerente:reportMeta.firmaGerente||'',
-        fotos:urls,
-        ubicacion:{
-          lat:locationData.lat,
-          lng:locationData.lng,
-          accuracy:locationData.accuracy||0,
-          direccionAprox:locationData.address||'',
-          capturedAt:locationData.capturedAt||new Date().toISOString(),
-          source:'navigator.geolocation'
-        }
-      };
-      console.log('[closeOrder] Antes de guardar reporte');
-      await window.saveReportToFirestore(reportData);
-      console.log('[closeOrder] Reporte guardado correctamente');
+    }
+    if(typeof window.loadReportsIntoPanel==='function'){
+      await window.loadReportsIntoPanel();
+    }
+    if(typeof window.renderDashboard==='function'){
+      window.renderDashboard();
     }
 
     // Generación automática de PDF al cerrar orden.

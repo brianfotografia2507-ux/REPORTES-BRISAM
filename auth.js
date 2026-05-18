@@ -1581,6 +1581,7 @@ window.saveReportToFirestore = async function saveReportToFirestore(reportData) 
 
   var payload = Object.assign({}, reportData || {});
   payload.uid = user.uid;
+  payload.ordenId = String(payload.ordenId || payload.folio || "").trim();
   payload.templateType = normalizeChecklistTemplateType(
     payload.templateType,
     payload.checklistNombre || payload.checklistName,
@@ -1588,6 +1589,18 @@ window.saveReportToFirestore = async function saveReportToFirestore(reportData) 
   );
   payload.checklistType = String(payload.checklistType || "").trim();
   payload.folio = String(payload.folio || payload.ordenId || "").trim();
+  payload.checklistNombre = String(
+    payload.checklistNombre ||
+      (payload.checklist && payload.checklist.name) ||
+      payload.checklistName ||
+      ""
+  ).trim();
+  if (!payload.checklist || typeof payload.checklist !== "object") {
+    payload.checklist = {
+      id: String(payload.checklistId || "").trim(),
+      name: payload.checklistNombre || "Checklist",
+    };
+  }
   payload.tecnicoNombre =
     profile.name ||
     payload.tecnicoNombre ||
@@ -1602,17 +1615,24 @@ window.saveReportToFirestore = async function saveReportToFirestore(reportData) 
   payload.materiales = String(payload.materiales || "").trim();
   payload.firmaTecnico = String(payload.firmaTecnico || payload.signatureData || "").trim();
   payload.firmaGerente = String(payload.firmaGerente || "").trim();
+  payload.fotos = Array.isArray(payload.fotos)
+    ? payload.fotos.filter(Boolean)
+    : Array.isArray(payload.photos)
+      ? payload.photos.filter(Boolean)
+      : [];
+  payload.ubicacion = payload.ubicacion || payload.location || null;
   payload.fecha = serverTimestamp();
   payload.userEmail = user.email || "";
   payload.userRole = profile.role || "";
 
-  console.log("[saveReportToFirestore] Guardando reporte en Firestore:", {
+  console.log("Guardando reporte en Firestore:", {
     ordenId: payload.ordenId || "",
+    checklistNombre: payload.checklistNombre || "",
     fotos: Array.isArray(payload.fotos) ? payload.fotos.length : 0,
     tecnicoNombre: payload.tecnicoNombre || "",
   });
   var created = await addDoc(collection(db, "reportes"), payload);
-  console.log("[saveReportToFirestore] Reporte guardado con id:", created.id);
+  console.log("Reporte guardado ID:", created.id);
   return { id: created.id };
 };
 
@@ -1670,9 +1690,87 @@ window.uploadEvidenceImage = async function uploadEvidenceImage(file, context) {
 
 function asMillis(value) {
   if (!value) return 0;
+  if (typeof value === "number" && isFinite(value)) return value;
+  if (value instanceof Date) return value.getTime();
   if (typeof value.toDate === "function") return value.toDate().getTime();
   if (typeof value.seconds === "number") return value.seconds * 1000;
+  if (typeof value === "string") {
+    var parsed = Date.parse(value);
+    return isNaN(parsed) ? 0 : parsed;
+  }
   return 0;
+}
+
+function firstNonEmptyString(values, fallback) {
+  var list = Array.isArray(values) ? values : [];
+  for (var i = 0; i < list.length; i++) {
+    var txt = String(list[i] == null ? "" : list[i]).trim();
+    if (txt) return txt;
+  }
+  return fallback || "";
+}
+
+function normalizeReportShape(raw, sourceCollection, docId) {
+  var data = Object.assign({}, raw || {});
+  var fromChecklistReports = sourceCollection === "checklist_reports";
+  var uid = firstNonEmptyString([data.uid, data.technicianId], "");
+  var checklistName = firstNonEmptyString(
+    [data.checklistNombre, data.checklistName, data.checklist && data.checklist.name],
+    "Checklist"
+  );
+  var ordenId = firstNonEmptyString([data.ordenId, data.folio, docId], docId || "—");
+  var fotos = Array.isArray(data.fotos)
+    ? data.fotos.filter(Boolean)
+    : Array.isArray(data.photos)
+      ? data.photos.filter(Boolean)
+      : [];
+  var fecha = data.fecha || data.createdAt || data.updatedAt || null;
+  return Object.assign({}, data, {
+    uid: uid,
+    tecnicoNombre: firstNonEmptyString(
+      [data.tecnicoNombre, data.technicianName, data.technician, data.userEmail],
+      "Técnico"
+    ),
+    checklistNombre: checklistName,
+    checklistType: firstNonEmptyString([data.checklistType, ""], ""),
+    checklist: {
+      id: firstNonEmptyString([data.checklistId, data.checklist && data.checklist.id], ""),
+      name: checklistName,
+    },
+    ordenId: ordenId,
+    folio: firstNonEmptyString([data.folio, data.ordenId, ordenId], ordenId),
+    fecha: fecha,
+    respuestas: data.respuestas || data.answers || {},
+    fotos: fotos,
+    firmaTecnico: firstNonEmptyString([data.firmaTecnico, data.signatureData], ""),
+    firmaGerente: firstNonEmptyString([data.firmaGerente, data.managerSignatureData], ""),
+    ubicacion: data.ubicacion || data.location || null,
+    _sourceCollection: sourceCollection || "reportes",
+    _fromChecklistReports: fromChecklistReports,
+  });
+}
+
+function mergeReportDocuments(primaryDocs, secondaryDocs) {
+  var merged = [];
+  var seen = {};
+  function toIdentity(item) {
+    var data = (item && item.data) || {};
+    var key = firstNonEmptyString([data.ordenId, data.folio], "");
+    var uid = firstNonEmptyString([data.uid], "");
+    if (key) return key + "|" + uid;
+    return String(item.source || "") + ":" + String(item.id || "");
+  }
+  function addDocs(list) {
+    (list || []).forEach(function (item) {
+      var identity = toIdentity(item);
+      if (seen[identity]) return;
+      seen[identity] = true;
+      merged.push(item);
+    });
+  }
+  addDocs(primaryDocs);
+  addDocs(secondaryDocs);
+  return merged;
 }
 
 function formatReportDate(value) {
@@ -2021,7 +2119,6 @@ function applyReportFilters(reportDocs) {
       if (tech && data.tecnicoNombre !== tech) return false;
       if (fromMs && ms && ms < fromMs) return false;
       if (toMs && ms && ms > toMs) return false;
-      if ((fromMs || toMs) && !ms) return false;
       return true;
     })
     .sort(function (a, b) {
@@ -2227,19 +2324,62 @@ window.loadReportsIntoPanel = async function loadReportsIntoPanel() {
       currentUserProfile = profile;
     }
 
-    var snap;
+    console.log("Cargando reportes desde Firestore:", {
+      role: profile.role || "",
+      uid: user.uid,
+    });
+
+    var reportesPromise;
+    var checklistReportsPromise;
     if (profile.role === "administrador") {
-      snap = await readApi.getDocs(collection(db, "reportes"));
+      reportesPromise = readApi.getDocs(collection(db, "reportes"));
+      checklistReportsPromise = readApi.getDocs(collection(db, "checklist_reports"));
     } else {
-      snap = await readApi.getDocs(
+      reportesPromise = readApi.getDocs(
         readApi.query(collection(db, "reportes"), readApi.where("uid", "==", user.uid))
+      );
+      checklistReportsPromise = readApi.getDocs(
+        readApi.query(
+          collection(db, "checklist_reports"),
+          readApi.where("technicianId", "==", user.uid)
+        )
       );
     }
 
-    var docs = snap.docs
-      .map(function (d) {
-        return { id: d.id, data: d.data() || {} };
-      });
+    var snapshots = await Promise.allSettled([reportesPromise, checklistReportsPromise]);
+    var reportesSnap =
+      snapshots[0] && snapshots[0].status === "fulfilled"
+        ? snapshots[0].value
+        : { docs: [] };
+    var checklistReportsSnap =
+      snapshots[1] && snapshots[1].status === "fulfilled"
+        ? snapshots[1].value
+        : { docs: [] };
+    if (snapshots[0] && snapshots[0].status === "rejected") {
+      console.warn("No se pudo leer collection reportes:", snapshots[0].reason);
+    }
+    if (snapshots[1] && snapshots[1].status === "rejected") {
+      console.warn("No se pudo leer collection checklist_reports:", snapshots[1].reason);
+    }
+
+    var reportesDocs = reportesSnap.docs.map(function (d) {
+      return {
+        id: d.id,
+        source: "reportes",
+        data: normalizeReportShape(d.data() || {}, "reportes", d.id),
+      };
+    });
+    var checklistDocs = checklistReportsSnap.docs.map(function (d) {
+      return {
+        id: "checklist_reports_" + d.id,
+        source: "checklist_reports",
+        data: normalizeReportShape(d.data() || {}, "checklist_reports", d.id),
+      };
+    });
+    var docs = mergeReportDocuments(reportesDocs, checklistDocs).sort(function (a, b) {
+      return asMillis((b && b.data && b.data.fecha) || 0) - asMillis((a && a.data && a.data.fecha) || 0);
+    });
+    console.log("Reportes encontrados:", docs.length);
 
     allLoadedReports = docs;
     docs.forEach(function (item) {
