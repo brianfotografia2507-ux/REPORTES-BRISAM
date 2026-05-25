@@ -3177,19 +3177,38 @@ function getPdfImageDimensions(src){
 }
 
 var pdfBrandLogoAssetPromise=null;
+var PDF_BRAND_LOGO_PRIMARY='assets/main-logo-2.png';
+var PDF_BRAND_LOGO_FALLBACK='assets/logo-main.png';
+
+async function resolvePdfLogoAsset(path){
+  var src=await resolvePdfImageSource(path);
+  if(!src) return null;
+  var dims=await getPdfImageDimensions(src);
+  return {
+    src:src,
+    width:dims.width||0,
+    height:dims.height||0
+  };
+}
+
 async function getPdfBrandLogoAsset(){
   if(pdfBrandLogoAssetPromise) return pdfBrandLogoAssetPromise;
   pdfBrandLogoAssetPromise=(async function(){
     try{
-      var src=await resolvePdfImageSource('./assets/logo-main.png');
-      if(!src) return null;
-      var dims=await getPdfImageDimensions(src);
-      return {
-        src:src,
-        width:dims.width||0,
-        height:dims.height||0
-      };
+      var primaryAsset=await resolvePdfLogoAsset(PDF_BRAND_LOGO_PRIMARY);
+      if(primaryAsset) return primaryAsset;
+      console.warn('[PDF] Logo principal no encontrado:',PDF_BRAND_LOGO_PRIMARY);
+
+      var fallbackAsset=await resolvePdfLogoAsset(PDF_BRAND_LOGO_FALLBACK);
+      if(fallbackAsset){
+        console.warn('[PDF] Usando logo fallback para encabezado:',PDF_BRAND_LOGO_FALLBACK);
+        return fallbackAsset;
+      }
+
+      console.warn('[PDF] No se pudo cargar ningún logo para el encabezado del PDF.');
+      return null;
     }catch(_err){
+      console.warn('[PDF] Error resolviendo logo para encabezado PDF:',_err);
       return null;
     }
   })();
