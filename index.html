@@ -2751,18 +2751,56 @@ function normalizeSectionDomKey(raw){
 function createSignaturePad(canvas){
   if(!canvas) return null;
   var ctx=canvas.getContext('2d');
-  var dpr=Math.max(window.devicePixelRatio||1,1);
+  var dpr=1;
   var drawing=false;
   var pointerId=null;
   var hasInk=false;
-  var lastPoint=null;
-  var lastTime=0;
-  var lastWidth=2.2;
-  var minWidth=1.2;
-  var maxWidth=3.6;
+  var points=[];
+  var strokeWidth=2.8;
   var initialized=false;
 
+  canvas.style.touchAction='none';
+
+  function midpoint(a,b){
+    return {
+      x:(a.x+b.x)/2,
+      y:(a.y+b.y)/2
+    };
+  }
+
+  function drawSegment(from,to){
+    ctx.beginPath();
+    ctx.moveTo(from.x,from.y);
+    ctx.lineTo(to.x,to.y);
+    ctx.stroke();
+  }
+
+  function drawSmoothedCurve(){
+    if(points.length<3) return;
+    var p0=points[points.length-3];
+    var p1=points[points.length-2];
+    var p2=points[points.length-1];
+    var m1=midpoint(p0,p1);
+    var m2=midpoint(p1,p2);
+    ctx.beginPath();
+    ctx.moveTo(m1.x,m1.y);
+    ctx.quadraticCurveTo(p1.x,p1.y,m2.x,m2.y);
+    ctx.stroke();
+  }
+
+  function appendPoint(point){
+    points.push(point);
+    if(points.length===2){
+      drawSegment(points[0],points[1]);
+      hasInk=true;
+      return;
+    }
+    drawSmoothedCurve();
+    hasInk=true;
+  }
+
   function resizeCanvas(preserve){
+    dpr=Math.max(window.devicePixelRatio||1,1);
     var rect=canvas.getBoundingClientRect();
     var width=Math.max(1,Math.round(rect.width*dpr));
     var height=Math.max(1,Math.round(rect.height*dpr));
@@ -2772,11 +2810,13 @@ function createSignaturePad(canvas){
     }
     canvas.width=width;
     canvas.height=height;
-    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(dpr,dpr);
     ctx.lineCap='round';
     ctx.lineJoin='round';
     ctx.strokeStyle='#111827';
     ctx.fillStyle='#111827';
+    ctx.lineWidth=strokeWidth;
     if(snapshot){
       setDataUrl(snapshot);
     }else if(!preserve){
@@ -2794,29 +2834,26 @@ function createSignaturePad(canvas){
   }
 
   function strokeTo(point){
-    if(!lastPoint){
-      lastPoint=point;
-      lastTime=point.t;
+    if(!points.length){
+      points=[point];
       return;
     }
-    var dx=point.x-lastPoint.x;
-    var dy=point.y-lastPoint.y;
+    var prev=points[points.length-1];
+    var dx=point.x-prev.x;
+    var dy=point.y-prev.y;
     var dist=Math.sqrt((dx*dx)+(dy*dy));
-    var dt=Math.max(8,point.t-lastTime);
-    var speed=dist/dt;
-    var targetWidth=Math.max(minWidth,Math.min(maxWidth,maxWidth-(speed*2.2)));
-    var width=(lastWidth*0.72)+(targetWidth*0.28);
-    var midX=(lastPoint.x+point.x)/2;
-    var midY=(lastPoint.y+point.y)/2;
-    ctx.lineWidth=width;
-    ctx.beginPath();
-    ctx.moveTo(lastPoint.x,lastPoint.y);
-    ctx.quadraticCurveTo(lastPoint.x,lastPoint.y,midX,midY);
-    ctx.stroke();
-    lastPoint=point;
-    lastTime=point.t;
-    lastWidth=width;
-    hasInk=true;
+    if(dist<=0.01) return;
+
+    // Interpolate sparse pointer events to prevent broken/punctuated strokes.
+    var steps=Math.max(1,Math.floor(dist/2.2));
+    for(var s=1;s<=steps;s++){
+      var t=s/steps;
+      appendPoint({
+        x:prev.x+(dx*t),
+        y:prev.y+(dy*t),
+        t:point.t
+      });
+    }
   }
 
   function onPointerDown(evt){
@@ -2825,13 +2862,7 @@ function createSignaturePad(canvas){
     canvas.setPointerCapture(pointerId);
     drawing=true;
     var p=getPoint(evt);
-    lastPoint=p;
-    lastTime=p.t;
-    lastWidth=maxWidth;
-    hasInk=true;
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,Math.max(minWidth,lastWidth/2),0,Math.PI*2);
-    ctx.fill();
+    points=[p];
   }
 
   function onPointerMove(evt){
@@ -2847,7 +2878,7 @@ function createSignaturePad(canvas){
     drawing=false;
     try{ canvas.releasePointerCapture(evt.pointerId); }catch(_err){}
     pointerId=null;
-    lastPoint=null;
+    points=[];
   }
 
   function clear(){
@@ -2855,7 +2886,7 @@ function createSignaturePad(canvas){
     hasInk=false;
     drawing=false;
     pointerId=null;
-    lastPoint=null;
+    points=[];
   }
 
   function setDataUrl(dataUrl){
