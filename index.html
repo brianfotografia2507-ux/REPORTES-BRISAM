@@ -456,9 +456,25 @@ tr:hover td{background:#f9fafb;}
 .ph-slot.filled{border-style:solid;border-color:var(--green);overflow:hidden;}
 .ph-slot.filled img{width:100%;height:100%;object-fit:cover;}
 
-/* ── SIGNATURE ── */
-canvas.sig{width:100%;height:110px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);cursor:crosshair;touch-action:none;display:block;}
-canvas.sig.signed{border-color:var(--green);}
+/* ── SIGNATURE FLOW ── */
+.sig-flow-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+.sig-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;}
+.sig-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
+.sig-card-title{font-size:12px;font-weight:600;color:var(--text);}
+.sig-status{font-size:11px;color:var(--muted2);}
+.sig-status.on{color:var(--green);font-weight:700;}
+.sig-preview{height:74px;border:1px dashed var(--border);border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.sig-preview img{max-width:100%;max-height:100%;object-fit:contain;display:none;}
+.sig-preview.filled{border-style:solid;border-color:rgba(34,197,94,.4);}
+.sig-preview.filled img{display:block;}
+.sig-preview.filled .sig-preview-empty{display:none;}
+.sig-preview-empty{font-size:11px;color:var(--muted);}
+.sig-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;}
+.sig-dyn-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;}
+.sig-dyn-status{font-size:11px;color:var(--muted2);}
+.sig-modal{max-width:960px;}
+.sig-modal-canvas-wrap{background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px;}
+.sig-modal-canvas{width:100%;height:clamp(300px,58vh,420px);background:#fff;border-radius:10px;border:1px solid #d1d5db;display:block;touch-action:none;cursor:crosshair;}
 
 /* ── REPORT ── */
 .rpt{background:#fff;color:#111827;border-radius:14px;padding:28px;font-family:'DM Sans',sans-serif;}
@@ -556,8 +572,6 @@ canvas.sig.signed{border-color:var(--green);}
 .mc-choice-grid{display:flex;flex-direction:column;gap:7px;margin-top:6px;}
 .mc-choice-item{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);}
 .mc-choice-item input[type="radio"]{accent-color:var(--accent);}
-.sig-dyn-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;}
-.sig-dyn-status{font-size:11px;color:var(--muted2);}
 
 /* ── MOBILE ── */
 @media(max-width:720px){
@@ -579,6 +593,7 @@ canvas.sig.signed{border-color:var(--green);}
   .map-side{max-height:280px;}
   #squad-map{min-height:420px;}
   .branch-geo-grid{grid-template-columns:1fr;}
+  .sig-flow-grid{grid-template-columns:1fr;}
 }
 </style>
 </head>
@@ -753,11 +768,36 @@ canvas.sig.signed{border-color:var(--green);}
             <div class="ph-slot" data-slot-index="2" onclick="addPhoto(this,2)"><span style="font-size:20px;">📷</span><span>Foto</span></div>
           </div>
           <input id="ph-file" type="file" accept="image/*" style="display:none;">
-          <div class="sec" style="margin-top:18px;">Firma del responsable</div>
-          <canvas class="sig" id="sig-c" width="600" height="110"></canvas>
-          <div style="display:flex;gap:8px;margin-top:7px;align-items:center;">
-            <button class="btn btn-ghost btn-sm" onclick="clearSig()">Limpiar firma</button>
-            <span style="font-size:12px;color:var(--muted);" id="sig-st">Sin firmar</span>
+          <div class="sec" style="margin-top:18px;">Firmas de conformidad</div>
+          <div class="sig-flow-grid">
+            <div class="sig-card">
+              <div class="sig-card-head">
+                <div class="sig-card-title">Firma del técnico</div>
+                <span class="sig-status" id="sig-tech-st">Sin firmar</span>
+              </div>
+              <div class="sig-preview" id="sig-tech-preview-wrap">
+                <img id="sig-tech-preview" alt="Vista previa firma técnico">
+                <span class="sig-preview-empty">Sin firma capturada</span>
+              </div>
+              <div class="sig-actions">
+                <button class="btn btn-primary btn-sm" type="button" onclick="openFixedSignatureModal('tech')">Firmar</button>
+                <button class="btn btn-ghost btn-sm" type="button" onclick="clearSig()">Limpiar</button>
+              </div>
+            </div>
+            <div class="sig-card">
+              <div class="sig-card-head">
+                <div class="sig-card-title">Firma del gerente</div>
+                <span class="sig-status" id="sig-manager-st">Sin firmar</span>
+              </div>
+              <div class="sig-preview" id="sig-manager-preview-wrap">
+                <img id="sig-manager-preview" alt="Vista previa firma gerente">
+                <span class="sig-preview-empty">Sin firma capturada</span>
+              </div>
+              <div class="sig-actions">
+                <button class="btn btn-primary btn-sm" type="button" onclick="openFixedSignatureModal('manager')">Firmar</button>
+                <button class="btn btn-ghost btn-sm" type="button" onclick="clearManagerSignature()">Limpiar</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1020,6 +1060,24 @@ canvas.sig.signed{border-color:var(--green);}
   </div>
 </div></div>
 
+<!-- SIGNATURE CAPTURE MODAL -->
+<div class="overlay" id="m-signature"><div class="modal modal-xl sig-modal">
+  <div class="m-head">
+    <div class="m-title" id="sig-modal-title">Capturar firma</div>
+    <button class="m-close" onclick="closeSignatureModal()">✕</button>
+  </div>
+  <div class="m-body">
+    <div class="sig-modal-canvas-wrap">
+      <canvas id="sig-modal-canvas" class="sig-modal-canvas"></canvas>
+    </div>
+  </div>
+  <div class="m-foot">
+    <button class="btn btn-ghost" type="button" onclick="closeSignatureModal()">Cancelar</button>
+    <button class="btn btn-ghost" type="button" onclick="clearSignatureModalCanvas()">Limpiar</button>
+    <button class="btn btn-primary" type="button" onclick="saveSignatureModal()">Guardar firma</button>
+  </div>
+</div></div>
+
 <!-- CONFIRM -->
 <div class="overlay" id="m-confirm"><div class="modal" style="max-width:380px;">
   <div class="m-head"><div class="m-title">Confirmar eliminación</div><button class="m-close" onclick="closeM('m-confirm')">✕</button></div>
@@ -1111,11 +1169,16 @@ var DB = {
   nextNum:4
 };
 
-var curOrderId=null, chkState={}, sigDraw=false, sigSigned=false;
+var curOrderId=null, chkState={}, sigSigned=false;
 var currentWorkMode='order';
 var currentFreeChecklistId='';
 var tmpSections=[];
 var dynamicSignatureState={};
+var dynamicSignatureMeta={};
+var fixedSignatureData='';
+var managerFixedSignatureData='';
+var signatureModalContext=null;
+var signatureModalPad=null;
 window.dashboardReportsCache=Array.isArray(window.dashboardReportsCache)?window.dashboardReportsCache:[];
 var techLiveGpsState={
   active:false,
@@ -2685,67 +2748,315 @@ function normalizeSectionDomKey(raw){
   return String(raw||'').replace(/[^a-zA-Z0-9_-]/g,'_');
 }
 
-function initDynamicSignatureCanvas(sectionId){
-  var key=normalizeSectionDomKey(sectionId);
-  var canvas=document.getElementById('sigdyn-'+key);
-  if(!canvas) return;
-  var statusEl=document.getElementById('sigdyn-st-'+key);
+function createSignaturePad(canvas){
+  if(!canvas) return null;
   var ctx=canvas.getContext('2d');
-  ctx.strokeStyle='#111827';
-  ctx.lineWidth=2;
-  ctx.lineCap='round';
-  ctx.lineJoin='round';
+  var dpr=Math.max(window.devicePixelRatio||1,1);
   var drawing=false;
-  function setSigned(){
-    dynamicSignatureState[key]={signed:true,value:canvas.toDataURL('image/png')};
-    if(statusEl) statusEl.textContent='✓ Firmado';
+  var pointerId=null;
+  var hasInk=false;
+  var lastPoint=null;
+  var lastTime=0;
+  var lastWidth=2.2;
+  var minWidth=1.2;
+  var maxWidth=3.6;
+  var initialized=false;
+
+  function resizeCanvas(preserve){
+    var rect=canvas.getBoundingClientRect();
+    var width=Math.max(1,Math.round(rect.width*dpr));
+    var height=Math.max(1,Math.round(rect.height*dpr));
+    var snapshot='';
+    if(preserve && hasInk){
+      try{ snapshot=canvas.toDataURL('image/png'); }catch(_err){}
+    }
+    canvas.width=width;
+    canvas.height=height;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+    ctx.strokeStyle='#111827';
+    ctx.fillStyle='#111827';
+    if(snapshot){
+      setDataUrl(snapshot);
+    }else if(!preserve){
+      hasInk=false;
+    }
   }
-  function getPos(e){
-    var r=canvas.getBoundingClientRect();
-    var s=e.touches?e.touches[0]:e;
-    return{x:(s.clientX-r.left)*(canvas.width/r.width),y:(s.clientY-r.top)*(canvas.height/r.height)};
+
+  function getPoint(evt){
+    var rect=canvas.getBoundingClientRect();
+    return {
+      x:evt.clientX-rect.left,
+      y:evt.clientY-rect.top,
+      t:(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now()
+    };
   }
-  function start(e){
-    e.preventDefault();
-    drawing=true;
-    var p=getPos(e);
+
+  function strokeTo(point){
+    if(!lastPoint){
+      lastPoint=point;
+      lastTime=point.t;
+      return;
+    }
+    var dx=point.x-lastPoint.x;
+    var dy=point.y-lastPoint.y;
+    var dist=Math.sqrt((dx*dx)+(dy*dy));
+    var dt=Math.max(8,point.t-lastTime);
+    var speed=dist/dt;
+    var targetWidth=Math.max(minWidth,Math.min(maxWidth,maxWidth-(speed*2.2)));
+    var width=(lastWidth*0.72)+(targetWidth*0.28);
+    var midX=(lastPoint.x+point.x)/2;
+    var midY=(lastPoint.y+point.y)/2;
+    ctx.lineWidth=width;
     ctx.beginPath();
-    ctx.moveTo(p.x,p.y);
-  }
-  function draw(e){
-    if(!drawing) return;
-    e.preventDefault();
-    var p=getPos(e);
-    ctx.lineTo(p.x,p.y);
+    ctx.moveTo(lastPoint.x,lastPoint.y);
+    ctx.quadraticCurveTo(lastPoint.x,lastPoint.y,midX,midY);
     ctx.stroke();
-    setSigned();
+    lastPoint=point;
+    lastTime=point.t;
+    lastWidth=width;
+    hasInk=true;
   }
-  function stop(){ drawing=false; }
-  canvas.addEventListener('mousedown',start);
-  canvas.addEventListener('mousemove',draw);
-  canvas.addEventListener('mouseup',stop);
-  canvas.addEventListener('mouseleave',stop);
-  canvas.addEventListener('touchstart',start,{passive:false});
-  canvas.addEventListener('touchmove',draw,{passive:false});
-  canvas.addEventListener('touchend',stop);
-  dynamicSignatureState[key]={signed:false,value:''};
-  if(statusEl) statusEl.textContent='Sin firmar';
+
+  function onPointerDown(evt){
+    evt.preventDefault();
+    pointerId=evt.pointerId;
+    canvas.setPointerCapture(pointerId);
+    drawing=true;
+    var p=getPoint(evt);
+    lastPoint=p;
+    lastTime=p.t;
+    lastWidth=maxWidth;
+    hasInk=true;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,Math.max(minWidth,lastWidth/2),0,Math.PI*2);
+    ctx.fill();
+  }
+
+  function onPointerMove(evt){
+    if(!drawing) return;
+    if(pointerId!==null && evt.pointerId!==pointerId) return;
+    evt.preventDefault();
+    strokeTo(getPoint(evt));
+  }
+
+  function onPointerUp(evt){
+    if(pointerId!==null && evt.pointerId!==pointerId) return;
+    evt.preventDefault();
+    drawing=false;
+    try{ canvas.releasePointerCapture(evt.pointerId); }catch(_err){}
+    pointerId=null;
+    lastPoint=null;
+  }
+
+  function clear(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    hasInk=false;
+    drawing=false;
+    pointerId=null;
+    lastPoint=null;
+  }
+
+  function setDataUrl(dataUrl){
+    clear();
+    var value=String(dataUrl||'').trim();
+    if(!value) return;
+    var img=new Image();
+    img.onload=function(){
+      var cw=canvas.width/dpr;
+      var ch=canvas.height/dpr;
+      var ratio=Math.min((cw*0.92)/img.width,(ch*0.84)/img.height);
+      ratio=Math.max(0.01,ratio);
+      var drawW=img.width*ratio;
+      var drawH=img.height*ratio;
+      var dx=(cw-drawW)/2;
+      var dy=(ch-drawH)/2;
+      ctx.drawImage(img,dx,dy,drawW,drawH);
+      hasInk=true;
+    };
+    img.src=value;
+  }
+
+  if(!initialized){
+    canvas.addEventListener('pointerdown',onPointerDown);
+    canvas.addEventListener('pointermove',onPointerMove);
+    canvas.addEventListener('pointerup',onPointerUp);
+    canvas.addEventListener('pointercancel',onPointerUp);
+    canvas.addEventListener('pointerleave',onPointerUp);
+    initialized=true;
+  }
+  resizeCanvas(false);
+
+  return{
+    canvas:canvas,
+    resize:function(){ resizeCanvas(true); },
+    clear:clear,
+    setDataUrl:setDataUrl,
+    isSigned:function(){ return hasInk; },
+    getDataUrl:function(){ return hasInk?canvas.toDataURL('image/png'):''; }
+  };
+}
+
+function updateFixedSignatureUi(){
+  var techStatus=document.getElementById('sig-tech-st');
+  var techWrap=document.getElementById('sig-tech-preview-wrap');
+  var techImg=document.getElementById('sig-tech-preview');
+  var managerStatus=document.getElementById('sig-manager-st');
+  var managerWrap=document.getElementById('sig-manager-preview-wrap');
+  var managerImg=document.getElementById('sig-manager-preview');
+
+  var techSigned=!!String(fixedSignatureData||'').trim();
+  sigSigned=techSigned;
+  if(techStatus){
+    techStatus.textContent=techSigned?'Firmado':'Sin firmar';
+    techStatus.classList.toggle('on',techSigned);
+  }
+  if(techWrap) techWrap.classList.toggle('filled',techSigned);
+  if(techImg){
+    if(techSigned){ techImg.src=fixedSignatureData; }
+    else{ techImg.removeAttribute('src'); }
+  }
+
+  var managerSigned=!!String(managerFixedSignatureData||'').trim();
+  if(managerStatus){
+    managerStatus.textContent=managerSigned?'Firmado':'Sin firmar';
+    managerStatus.classList.toggle('on',managerSigned);
+  }
+  if(managerWrap) managerWrap.classList.toggle('filled',managerSigned);
+  if(managerImg){
+    if(managerSigned){ managerImg.src=managerFixedSignatureData; }
+    else{ managerImg.removeAttribute('src'); }
+  }
+}
+
+function updateDynamicSignatureUi(sigKey){
+  var key=normalizeSectionDomKey(sigKey);
+  var state=dynamicSignatureState[key]||{signed:false,value:''};
+  var signed=!!String(state.value||'').trim();
+  var statusEl=document.getElementById('sigdyn-st-'+key);
+  var wrapEl=document.getElementById('sigdyn-preview-wrap-'+key);
+  var imgEl=document.getElementById('sigdyn-preview-'+key);
+  if(statusEl){
+    statusEl.textContent=signed?'Firmado':'Sin firmar';
+    statusEl.classList.toggle('on',signed);
+  }
+  if(wrapEl) wrapEl.classList.toggle('filled',signed);
+  if(imgEl){
+    if(signed){ imgEl.src=state.value; }
+    else{ imgEl.removeAttribute('src'); }
+  }
+}
+
+function setDynamicSignatureValue(sigKey,value){
+  var key=normalizeSectionDomKey(sigKey);
+  var signed=!!String(value||'').trim();
+  dynamicSignatureState[key]={signed:signed,value:signed?String(value):''};
+  updateDynamicSignatureUi(key);
 }
 
 function clearSectionSignature(sectionId){
+  setDynamicSignatureValue(sectionId,'');
+}
+
+function getSignatureValueFromContext(ctx){
+  if(!ctx) return '';
+  if(ctx.type==='tech') return fixedSignatureData||'';
+  if(ctx.type==='manager') return managerFixedSignatureData||'';
+  if(ctx.type==='dynamic'){
+    var state=dynamicSignatureState[ctx.key]||{value:''};
+    return String(state.value||'');
+  }
+  return '';
+}
+
+function applySignatureValueToContext(ctx,value){
+  if(!ctx) return;
+  var val=String(value||'');
+  if(ctx.type==='tech'){
+    fixedSignatureData=val;
+    updateFixedSignatureUi();
+    return;
+  }
+  if(ctx.type==='manager'){
+    managerFixedSignatureData=val;
+    updateFixedSignatureUi();
+    return;
+  }
+  if(ctx.type==='dynamic'){
+    setDynamicSignatureValue(ctx.key,val);
+  }
+}
+
+function ensureSignatureModalPad(){
+  if(signatureModalPad && signatureModalPad.canvas) return signatureModalPad;
+  var canvas=document.getElementById('sig-modal-canvas');
+  if(!canvas) return null;
+  signatureModalPad=createSignaturePad(canvas);
+  return signatureModalPad;
+}
+
+function openSignatureModal(context){
+  var pad=ensureSignatureModalPad();
+  if(!pad){ toast('⚠️ No se pudo abrir la firma'); return; }
+  signatureModalContext=context||null;
+  var titleEl=document.getElementById('sig-modal-title');
+  if(titleEl){
+    titleEl.textContent='Firmar · '+String((context&&context.label)||'Firma');
+  }
+  pad.clear();
+  var existing=getSignatureValueFromContext(context);
+  if(existing) pad.setDataUrl(existing);
+  var modal=document.getElementById('m-signature');
+  if(modal) modal.classList.add('on');
+  setTimeout(function(){ if(pad&&pad.resize) pad.resize(); },40);
+}
+
+function closeSignatureModal(){
+  var modal=document.getElementById('m-signature');
+  if(modal) modal.classList.remove('on');
+  signatureModalContext=null;
+}
+
+function clearSignatureModalCanvas(){
+  var pad=ensureSignatureModalPad();
+  if(!pad) return;
+  pad.clear();
+}
+
+function saveSignatureModal(){
+  var pad=ensureSignatureModalPad();
+  if(!pad || !signatureModalContext) return;
+  var value=pad.getDataUrl();
+  if(!value){
+    toast('⚠️ Realiza la firma antes de guardar');
+    return;
+  }
+  applySignatureValueToContext(signatureModalContext,value);
+  closeSignatureModal();
+}
+
+function openFixedSignatureModal(kind){
+  var type=kind==='manager'?'manager':'tech';
+  var label=type==='manager'?'Firma del gerente':'Firma del técnico';
+  openSignatureModal({type:type,label:label});
+}
+
+function openDynamicSignatureModal(sectionId){
   var key=normalizeSectionDomKey(sectionId);
-  var canvas=document.getElementById('sigdyn-'+key);
-  var statusEl=document.getElementById('sigdyn-st-'+key);
-  if(!canvas) return;
-  canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
-  dynamicSignatureState[key]={signed:false,value:''};
-  if(statusEl) statusEl.textContent='Sin firmar';
+  var meta=dynamicSignatureMeta[key]||{};
+  openSignatureModal({
+    type:'dynamic',
+    key:key,
+    label:meta.label||'Firma'
+  });
 }
 
 function buildWorkDynamicHtml(ck){
   var dynHtml='';
   chkState={};
   dynamicSignatureState={};
+  dynamicSignatureMeta={};
   var sections=(ck&&Array.isArray(ck.sections))?ck.sections:[];
   sections.forEach(function(sec,si){
     if(sec.type==='checklist'){
@@ -2783,7 +3094,10 @@ function buildWorkDynamicHtml(ck){
     if(sec.type==='signature'){
       var sigKey=normalizeSectionDomKey(sec.id||('sig-'+si));
       var req=sec.required===true?' <span style="color:var(--accent)">*</span>':'';
-      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+(sec.title||'Firma')+'</div><div class="dyn-field"><label>'+(sec.label||'Firma')+req+'</label><canvas class="sig" id="sigdyn-'+sigKey+'" width="520" height="130"></canvas><div class="sig-dyn-tools"><button class="btn btn-ghost btn-sm" onclick="clearSectionSignature(\''+String(sec.id||'')+'\')">Limpiar firma</button><span class="sig-dyn-status" id="sigdyn-st-'+sigKey+'">Sin firmar</span></div></div></div>';
+      var sigLabel=String(sec.label||sec.title||'Firma');
+      dynamicSignatureMeta[sigKey]={label:sigLabel};
+      dynamicSignatureState[sigKey]={signed:false,value:''};
+      dynHtml+='<div class="dyn-section"><div class="dyn-section-title">'+(sec.title||'Firma')+'</div><div class="dyn-field"><label>'+sigLabel+req+'</label><div class="sig-card"><div class="sig-card-head"><div class="sig-card-title">'+sigLabel+'</div><span class="sig-status sig-dyn-status" id="sigdyn-st-'+sigKey+'">Sin firmar</span></div><div class="sig-preview" id="sigdyn-preview-wrap-'+sigKey+'"><img id="sigdyn-preview-'+sigKey+'" alt="Vista previa firma"><span class="sig-preview-empty">Sin firma capturada</span></div><div class="sig-actions"><button class="btn btn-primary btn-sm" type="button" onclick="openDynamicSignatureModal(\''+String(sec.id||'')+'\')">Firmar</button><button class="btn btn-ghost btn-sm" type="button" onclick="clearSectionSignature(\''+String(sec.id||'')+'\')">Limpiar</button></div></div></div></div>';
       return;
     }
   });
@@ -2798,7 +3112,11 @@ function initDynamicWorkSections(ck){
   var sections=(ck&&Array.isArray(ck.sections))?ck.sections:[];
   sections.forEach(function(sec,si){
     if(sec.type==='signature'){
-      initDynamicSignatureCanvas(sec.id||('sig-'+si));
+      var sigKey=normalizeSectionDomKey(sec.id||('sig-'+si));
+      if(!dynamicSignatureState[sigKey]){
+        dynamicSignatureState[sigKey]={signed:false,value:''};
+      }
+      updateDynamicSignatureUi(sigKey);
     }
   });
 }
@@ -2835,10 +3153,9 @@ function openTechChecklistWork(checklistId){
   var dynHtml=buildWorkDynamicHtml(ck);
   document.getElementById('wd-dynamic').innerHTML=dynHtml;
   initDynamicWorkSections(ck);
-  sigSigned=false;
-  document.getElementById('sig-st').textContent='Sin firmar';
   resetPhotoSlots();
   clearSig();
+  clearManagerSignature();
   updateProg();
   setWorkModeButtonLabel();
   document.getElementById('wd-wrap').style.display='block';
@@ -2906,10 +3223,9 @@ function openWork(id){
   var dynHtml=buildWorkDynamicHtml(ck);
   document.getElementById('wd-dynamic').innerHTML=dynHtml;
   initDynamicWorkSections(ck);
-  sigSigned=false;
-  document.getElementById('sig-st').textContent='Sin firmar';
   resetPhotoSlots();
   clearSig();
+  clearManagerSignature();
   updateProg();
   o.status='progress';
   if(typeof window.updateOrderStatusInFirestore==='function'){
@@ -4301,19 +4617,21 @@ async function uploadPendingPhotos(orderId){
 }
 
 function initSig(){
-  var c=document.getElementById('sig-c'),ctx=c.getContext('2d');
-  ctx.strokeStyle='#111827';ctx.lineWidth=2;ctx.lineCap='round';ctx.lineJoin='round';
-  function pos(e){ var r=c.getBoundingClientRect(),s=e.touches?e.touches[0]:e; return{x:(s.clientX-r.left)*(c.width/r.width),y:(s.clientY-r.top)*(c.height/r.height)}; }
-  c.addEventListener('mousedown',function(e){sigDraw=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
-  c.addEventListener('mousemove',function(e){if(!sigDraw)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();markSig();});
-  c.addEventListener('mouseup',function(){sigDraw=false;});
-  c.addEventListener('mouseleave',function(){sigDraw=false;});
-  c.addEventListener('touchstart',function(e){e.preventDefault();sigDraw=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
-  c.addEventListener('touchmove',function(e){e.preventDefault();if(!sigDraw)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();markSig();},{passive:false});
-  c.addEventListener('touchend',function(){sigDraw=false;});
+  fixedSignatureData='';
+  managerFixedSignatureData='';
+  sigSigned=false;
+  updateFixedSignatureUi();
+  ensureSignatureModalPad();
 }
-function markSig(){ sigSigned=true; document.getElementById('sig-c').classList.add('signed'); document.getElementById('sig-st').textContent='✓ Firmado'; }
-function clearSig(){ var c=document.getElementById('sig-c'); c.getContext('2d').clearRect(0,0,c.width,c.height); sigSigned=false; c.classList.remove('signed'); document.getElementById('sig-st').textContent='Sin firmar'; }
+function clearSig(){
+  fixedSignatureData='';
+  sigSigned=false;
+  updateFixedSignatureUi();
+}
+function clearManagerSignature(){
+  managerFixedSignatureData='';
+  updateFixedSignatureUi();
+}
 
 function collectChecklistReportData(ck,total,done){
   var respuestas={sections:[]},obs=[];
@@ -4517,7 +4835,14 @@ async function closeOrder(){
   closingOrderInProgress=true;
   if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='0.7'; closeBtn.textContent='⏳ Guardando...'; }
   var reportMeta=extractBrisamReportMeta(captured.respuestas,captured.observaciones||(!isFree&&o?o.desc:''));
-  var signatureData=document.getElementById('sig-c').toDataURL('image/png');
+  var signatureData=String(fixedSignatureData||'').trim();
+  if(!signatureData){
+    closingOrderInProgress=false;
+    if(closeBtn){ closeBtn.disabled=false; closeBtn.style.opacity=''; setWorkModeButtonLabel(); }
+    toast('⚠️ Se requiere la firma del técnico');
+    return;
+  }
+  var managerSignatureData=String(managerFixedSignatureData||reportMeta.firmaGerente||'').trim();
   var reportFolio=isFree?generatedFolio:(o.folio||o.id);
   var checklistTemplateType=resolvePdfTemplateType({
     templateType:ck&&ck.templateType,
@@ -4576,7 +4901,7 @@ async function closeOrder(){
       respuestas:captured.respuestas,
       observaciones:finalObservaciones,
       firmaTecnico:signatureData,
-      firmaGerente:reportMeta.firmaGerente||'',
+      firmaGerente:managerSignatureData,
       fotos:urls,
       ubicacion:{
         lat:locationData.lat,
@@ -4618,7 +4943,7 @@ async function closeOrder(){
           source:'navigator.geolocation'
         },
         signatureData:signatureData,
-        managerSignatureData:reportMeta.firmaGerente||''
+        managerSignatureData:managerSignatureData
       });
     }
     if(typeof window.loadReportsIntoPanel==='function'){
@@ -4655,7 +4980,7 @@ async function closeOrder(){
         fotos:urls,
         signatureData:signatureData,
         firmaTecnico:signatureData,
-        firmaGerente:reportMeta.firmaGerente||'',
+        firmaGerente:managerSignatureData,
         ubicacion:{
           lat:locationData.lat,
           lng:locationData.lng,
@@ -4696,6 +5021,8 @@ async function closeOrder(){
       var emsg=String((err&&err.message)||'');
       if(emsg.indexOf('ubicación GPS')!==-1){
         toast('⚠️ Activa la ubicación exacta para cerrar la orden');
+      }else if(emsg.indexOf('firma del técnico')!==-1){
+        toast('⚠️ Se requiere la firma del técnico');
       }else{
         toast('❌ No se pudo guardar. Revisa la subida de imágenes e intenta nuevamente.');
       }
@@ -4745,7 +5072,10 @@ function buildReport(o,locationData){
   var photos='';
   document.querySelectorAll('.ph-slot.filled').forEach(function(s){ photos+='<div class="rphoto">'+s.innerHTML+'</div>'; });
   if(!photos) photos='<div style="color:#9ca3af;font-size:11px;padding:6px;">Sin fotos adjuntas</div>';
-  var sigData=document.getElementById('sig-c').toDataURL();
+  var sigData=String(fixedSignatureData||'').trim();
+  var sigHtml=sigData
+    ? '<img src="'+sigData+'" style="height:55px;max-width:100%;">'
+    : '<div style="font-size:11px;color:#9ca3af;">Sin firma capturada</div>';
 
   document.getElementById('rpt-content').innerHTML=
     '<div style="display:flex;gap:10px;margin-bottom:16px;">'
@@ -4771,7 +5101,7 @@ function buildReport(o,locationData){
     +'<div class="rphotos">'+photos+'</div>'
     +'<div class="rdiv"></div>'
     +'<div class="rst">Firma de conformidad</div>'
-    +'<div class="rsig"><img src="'+sigData+'" style="height:55px;max-width:100%;"><div class="rsig-lbl">Responsable en sucursal — '+(br?br.name:'—')+'</div></div>'
+    +'<div class="rsig">'+sigHtml+'<div class="rsig-lbl">Responsable en sucursal — '+(br?br.name:'—')+'</div></div>'
     +'<div class="rfoot"><div class="rfoot-brand">MantenPro</div><div class="rfoot-meta">Generado: '+now+' · '+orderLabel+'</div></div>'
     +'</div>';
 }
