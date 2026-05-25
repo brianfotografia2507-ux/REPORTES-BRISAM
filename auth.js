@@ -19,6 +19,7 @@ import {
   onSnapshot,
   query,
   setDoc,
+  updateDoc,
   serverTimestamp,
   where,
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
@@ -45,6 +46,7 @@ var storageReady = !!storage;
 var firestoreReadApiPromise = null;
 var allLoadedReports = [];
 var selectedReportForPreview = null;
+var editingReportItem = null;
 var reportFilters = {
   tecnico: "",
   from: "",
@@ -1636,6 +1638,43 @@ window.saveReportToFirestore = async function saveReportToFirestore(reportData) 
   return { id: created.id };
 };
 
+window.updateReportInFirestore = async function updateReportInFirestore(reportId, updatedData) {
+  if (!firebaseAvailable || !db) {
+    throw new Error("Firebase no está disponible.");
+  }
+  var resolved = await resolveCurrentUserWithProfile();
+  if (!resolved.profile || resolved.profile.role !== "administrador") {
+    throw new Error("Solo administradores pueden editar reportes.");
+  }
+  var safeId = String(reportId || "").trim();
+  if (!safeId) {
+    throw new Error("Reporte inválido.");
+  }
+  var ref = doc(db, "reportes", safeId);
+  var existing = await getDoc(ref);
+  if (!existing.exists()) {
+    throw new Error("El reporte no existe en Firestore.");
+  }
+  var payload = Object.assign({}, updatedData || {});
+  var respuestas = payload.respuestas;
+  if (!respuestas || typeof respuestas !== "object" || Array.isArray(respuestas)) {
+    respuestas = {};
+  }
+  var patch = {
+    gerenteTurno: String(payload.gerenteTurno || "").trim(),
+    sucursalNombre: String(payload.sucursalNombre || "").trim(),
+    fallaReportada: String(payload.fallaReportada || "").trim(),
+    servicioRealizado: String(payload.servicioRealizado || "").trim(),
+    observaciones: String(payload.observaciones || "").trim(),
+    respuestas: respuestas,
+    answers: respuestas,
+    updatedAt: serverTimestamp(),
+    updatedBy: resolved.user.uid,
+  };
+  await updateDoc(ref, patch);
+  return { id: safeId };
+};
+
 window.uploadEvidenceImage = async function uploadEvidenceImage(file, context) {
   if (!firebaseAvailable || !storageReady) {
     throw new Error("Firebase Storage no está disponible.");
@@ -1900,6 +1939,21 @@ function maybeRenderDashboardWithAddress() {
   }
 }
 
+function canEditReportItem(item) {
+  if (currentRole !== "administrador") return false;
+  var source = String((item && item.source) || "reportes");
+  return source === "reportes";
+}
+
+function currentReportResponses(item) {
+  var data = (item && item.data) || {};
+  var responses = data.respuestas || data.answers || {};
+  if (!responses || typeof responses !== "object" || Array.isArray(responses)) {
+    return {};
+  }
+  return responses;
+}
+
 function renderReportPreviewPanel(item) {
   var container = $("rpt-content");
   if (!container || !item) return;
@@ -1961,11 +2015,15 @@ function renderReportPreviewPanel(item) {
       );
     })
     .join("");
+  var canEdit = canEditReportItem(item);
 
   var actions =
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
     '<button class="btn btn-ghost btn-sm" id="rp-back">← Volver a reportes</button>' +
     '<button class="btn btn-primary btn-sm" id="rp-gen-pdf">⬇ Generar PDF</button>' +
+    (canEdit
+      ? '<button class="btn btn-ghost btn-sm" id="rp-edit-report">Editar reporte</button>'
+      : "") +
     '<a class="btn btn-ghost btn-sm" id="rp-mailto" href="' +
     mailToForReport(item) +
     '">✉ Enviar por correo</a>' +
@@ -2074,6 +2132,12 @@ function renderReportPreviewPanel(item) {
       }
     };
   }
+  var editBtn = $("rp-edit-report");
+  if (editBtn) {
+    editBtn.onclick = function () {
+      window.openReportEditModal(item.id);
+    };
+  }
 }
 
 window.openReportPreview = function openReportPreview(reportId) {
@@ -2083,6 +2147,105 @@ window.openReportPreview = function openReportPreview(reportId) {
   if (!match) return;
   selectedReportForPreview = match;
   renderReportPreviewPanel(match);
+};
+
+window.closeReportEditModal = function closeReportEditModal() {
+  editingReportItem = null;
+  var modal = $("m-report-edit");
+  if (modal) modal.classList.remove("on");
+};
+
+window.openReportEditModal = function openReportEditModal(reportId) {
+  if (currentRole !== "administrador") {
+    if (typeof window.toast === "function") {
+      window.toast("⚠️ Solo administradores pueden editar reportes");
+    }
+    return;
+  }
+  var match = (allLoadedReports || []).find(function (item) {
+    return item.id === reportId;
+  });
+  if (!match) {
+    if (typeof window.toast === "function") {
+      window.toast("⚠️ Reporte no encontrado");
+    }
+    return;
+  }
+  if (!canEditReportItem(match)) {
+    if (typeof window.toast === "function") {
+      window.toast("⚠️ Este reporte no es editable desde esta vista");
+    }
+    return;
+  }
+  editingReportItem = match;
+  var data = match.data || {};
+  var reportLabel = firstNonEmptyString([data.ordenId, data.folio, match.id], match.id);
+  $("re-report-id").value = String(match.id || "");
+  $("re-title-id").textContent = "Editar reporte " + reportLabel;
+  $("re-gerente").value = String(data.gerenteTurno || data.managerName || "");
+  $("re-sucursal").value = String(data.sucursalNombre || "");
+  $("re-falla").value = String(data.fallaReportada || "");
+  $("re-servicio").value = String(data.servicioRealizado || "");
+  $("re-observaciones").value = String(data.observaciones || "");
+  var responseObj = currentReportResponses(match);
+  var responseText = "{}";
+  try {
+    responseText = JSON.stringify(responseObj, null, 2);
+  } catch (_err) {
+    responseText = "{}";
+  }
+  $("re-respuestas").value = responseText;
+  var modal = $("m-report-edit");
+  if (modal) modal.classList.add("on");
+};
+
+window.saveReportEdit = async function saveReportEdit() {
+  if (currentRole !== "administrador") {
+    window.toast && window.toast("⚠️ Solo administradores pueden editar reportes");
+    return;
+  }
+  var reportId = String((($("re-report-id") || {}).value) || "").trim();
+  if (!reportId || !editingReportItem) {
+    window.toast && window.toast("⚠️ No se encontró el reporte a editar");
+    return;
+  }
+  var responsesRaw = String((($("re-respuestas") || {}).value) || "").trim();
+  var parsedResponses = {};
+  if (responsesRaw) {
+    try {
+      parsedResponses = JSON.parse(responsesRaw);
+    } catch (_err) {
+      window.toast && window.toast("⚠️ Respuestas dinámicas inválidas (JSON)");
+      return;
+    }
+  }
+  if (!parsedResponses || typeof parsedResponses !== "object" || Array.isArray(parsedResponses)) {
+    window.toast && window.toast("⚠️ Respuestas dinámicas inválidas");
+    return;
+  }
+  var payload = {
+    gerenteTurno: String((($("re-gerente") || {}).value) || "").trim(),
+    sucursalNombre: String((($("re-sucursal") || {}).value) || "").trim(),
+    fallaReportada: String((($("re-falla") || {}).value) || "").trim(),
+    servicioRealizado: String((($("re-servicio") || {}).value) || "").trim(),
+    observaciones: String((($("re-observaciones") || {}).value) || "").trim(),
+    respuestas: parsedResponses,
+  };
+  try {
+    await window.updateReportInFirestore(reportId, payload);
+    window.closeReportEditModal();
+    window.toast && window.toast("✅ Reporte actualizado correctamente");
+    await window.loadReportsIntoPanel();
+    if (typeof window.renderDashboard === "function") {
+      window.renderDashboard();
+    }
+    if (selectedReportForPreview && selectedReportForPreview.id === reportId) {
+      window.openReportPreview(reportId);
+    }
+  } catch (err) {
+    console.error("Error actualizando reporte:", err);
+    window.toast && window.toast("❌ No se pudo actualizar el reporte");
+  }
 };
 
 function reportDayStart(value) {

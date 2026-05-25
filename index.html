@@ -976,6 +976,50 @@ canvas.sig.signed{border-color:var(--green);}
   <div class="m-foot"><button class="btn btn-ghost" onclick="closeM('m-cl')">Cancelar</button><button class="btn btn-primary" onclick="saveCl()">Guardar Check-list</button></div>
 </div></div>
 
+<!-- REPORT EDIT MODAL -->
+<div class="overlay" id="m-report-edit"><div class="modal modal-xl">
+  <div class="m-head">
+    <div class="m-title" id="re-title-id">Editar reporte</div>
+    <button class="m-close" onclick="closeReportEditModal()">✕</button>
+  </div>
+  <div class="m-body">
+    <input type="hidden" id="re-report-id">
+    <div class="frow">
+      <div class="fg">
+        <label class="fl">Gerente en turno</label>
+        <input class="fi" id="re-gerente" placeholder="Nombre del gerente">
+      </div>
+      <div class="fg">
+        <label class="fl">Sucursal</label>
+        <input class="fi" id="re-sucursal" placeholder="Sucursal">
+      </div>
+    </div>
+    <div class="fg">
+      <label class="fl">Falla reportada</label>
+      <textarea class="ft" id="re-falla" placeholder="Describe la falla reportada"></textarea>
+    </div>
+    <div class="fg">
+      <label class="fl">Servicio realizado</label>
+      <textarea class="ft" id="re-servicio" placeholder="Describe el servicio realizado"></textarea>
+    </div>
+    <div class="fg">
+      <label class="fl">Observaciones</label>
+      <textarea class="ft" id="re-observaciones" placeholder="Observaciones finales"></textarea>
+    </div>
+    <div class="fg">
+      <label class="fl">Respuestas dinámicas del checklist (JSON)</label>
+      <textarea class="ft" id="re-respuestas" style="min-height:220px;font-family:monospace;font-size:12px;" placeholder='{"sections":[],"progreso":{"total":0,"completadas":0,"porcentaje":0}}'></textarea>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted);">
+        Las fotos y firmas existentes no se eliminan al guardar esta edición.
+      </div>
+    </div>
+  </div>
+  <div class="m-foot">
+    <button class="btn btn-ghost" onclick="closeReportEditModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="saveReportEdit()">Guardar cambios</button>
+  </div>
+</div></div>
+
 <!-- CONFIRM -->
 <div class="overlay" id="m-confirm"><div class="modal" style="max-width:380px;">
   <div class="m-head"><div class="m-title">Confirmar eliminación</div><button class="m-close" onclick="closeM('m-confirm')">✕</button></div>
